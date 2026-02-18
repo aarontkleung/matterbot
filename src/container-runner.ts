@@ -1,5 +1,5 @@
 /**
- * Container Runner for NanoClaw
+ * Container Runner for MatterBot
  * Spawns agent execution in Docker container and handles IPC
  */
 import { ChildProcess, exec, spawn } from 'child_process';
@@ -21,8 +21,8 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---MATTERBOT_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---MATTERBOT_OUTPUT_END---';
 
 function getHomeDir(): string {
   const home = process.env.HOME || os.homedir();
@@ -219,7 +219,7 @@ export async function runContainerAgent(
 
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
-  const containerName = `nanoclaw-${safeName}-${Date.now()}`;
+  const containerName = `matterbot-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
 
   logger.debug(

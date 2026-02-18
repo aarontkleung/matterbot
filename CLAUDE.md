@@ -1,4 +1,4 @@
-# NanoClaw
+# MatterBot
 
 Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
 
@@ -41,8 +41,8 @@ npm run build        # Compile TypeScript
 
 Service management:
 ```bash
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl load ~/Library/LaunchAgents/com.matterbot.plist
+launchctl unload ~/Library/LaunchAgents/com.matterbot.plist
 ```
 
 ## Container Build Cache
@@ -54,4 +54,4 @@ docker builder prune -af
 ./container/build.sh
 ```
 
-Always verify after rebuild: `docker run -i --rm --entrypoint wc nanoclaw-agent:latest -l /app/src/index.ts`
+Always verify after rebuild: `docker run -i --rm --entrypoint wc matterbot-agent:latest -l /app/src/index.ts`

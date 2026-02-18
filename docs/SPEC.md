@@ -1,4 +1,4 @@
-# NanoClaw Specification
+# MatterBot Specification
 
 A personal Claude assistant accessible via WhatsApp, with persistent memory per conversation, scheduled tasks, and email integration.
 
@@ -62,7 +62,7 @@ A personal Claude assistant accessible via WhatsApp, with persistent memory per 
 │  │    • Read, Write, Edit, Glob, Grep (file operations)           │   │
 │  │    • WebSearch, WebFetch (internet access)                     │   │
 │  │    • agent-browser (browser automation)                        │   │
-│  │    • mcp__nanoclaw__* (scheduler tools via IPC)                │   │
+│  │    • mcp__matterbot__* (scheduler tools via IPC)                │   │
 │  │                                                                │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
@@ -85,7 +85,7 @@ A personal Claude assistant accessible via WhatsApp, with persistent memory per 
 ## Folder Structure
 
 ```
-nanoclaw/
+matterbot/
 ├── CLAUDE.md                      # Project context for Claude Code
 ├── docs/
 │   ├── SPEC.md                    # This specification document
@@ -159,12 +159,12 @@ nanoclaw/
 │   └── ipc/                       # Container IPC (messages/, tasks/)
 │
 ├── logs/                          # Runtime logs (gitignored)
-│   ├── nanoclaw.log               # Host stdout
-│   └── nanoclaw.error.log         # Host stderr
+│   ├── matterbot.log               # Host stdout
+│   └── matterbot.error.log         # Host stderr
 │   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
 │
 └── launchd/
-    └── com.nanoclaw.plist         # macOS service configuration
+    └── com.matterbot.plist         # macOS service configuration
 ```
 
 ---
@@ -187,7 +187,7 @@ export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 
 // Container configuration
-export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
+export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'matterbot-agent:latest';
 export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10); // 30min default
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min — keep container alive after last result
@@ -257,7 +257,7 @@ Or edit the default in `src/config.ts`. This changes:
 ### Placeholder Values in launchd
 
 Files with `{{PLACEHOLDER}}` values need to be configured:
-- `{{PROJECT_ROOT}}` - Absolute path to your nanoclaw installation
+- `{{PROJECT_ROOT}}` - Absolute path to your matterbot installation
 - `{{NODE_PATH}}` - Path to node binary (detected via `which node`)
 - `{{HOME}}` - User's home directory
 
@@ -265,7 +265,7 @@ Files with `{{PLACEHOLDER}}` values need to be configured:
 
 ## Memory System
 
-NanoClaw uses a hierarchical memory system based on CLAUDE.md files.
+MatterBot uses a hierarchical memory system based on CLAUDE.md files.
 
 ### Memory Hierarchy
 
@@ -341,7 +341,7 @@ Sessions enable conversation continuity - Claude remembers what you talked about
    ├── cwd: groups/{group-name}/
    ├── prompt: conversation history + current message
    ├── resume: session_id (for continuity)
-   └── mcpServers: nanoclaw (scheduler)
+   └── mcpServers: matterbot (scheduler)
    │
    ▼
 8. Claude processes message:
@@ -398,7 +398,7 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 ## Scheduled Tasks
 
-NanoClaw has a built-in scheduler that runs tasks as full agents in their group's context.
+MatterBot has a built-in scheduler that runs tasks as full agents in their group's context.
 
 ### How Scheduling Works
 
@@ -420,7 +420,7 @@ NanoClaw has a built-in scheduler that runs tasks as full agents in their group'
 ```
 User: @Andy remind me every Monday at 9am to review the weekly metrics
 
-Claude: [calls mcp__nanoclaw__schedule_task]
+Claude: [calls mcp__matterbot__schedule_task]
         {
           "prompt": "Send a reminder to review weekly metrics. Be encouraging!",
           "schedule_type": "cron",
@@ -435,7 +435,7 @@ Claude: Done! I'll remind you every Monday at 9am.
 ```
 User: @Andy at 5pm today, send me a summary of today's emails
 
-Claude: [calls mcp__nanoclaw__schedule_task]
+Claude: [calls mcp__matterbot__schedule_task]
         {
           "prompt": "Search for today's emails, summarize the important ones, and send the summary to the group.",
           "schedule_type": "once",
@@ -459,9 +459,9 @@ From main channel:
 
 ## MCP Servers
 
-### NanoClaw MCP (built-in)
+### MatterBot MCP (built-in)
 
-The `nanoclaw` MCP server is created dynamically per agent call with the current group's context.
+The `matterbot` MCP server is created dynamically per agent call with the current group's context.
 
 **Available Tools:**
 | Tool | Purpose |
@@ -479,12 +479,12 @@ The `nanoclaw` MCP server is created dynamically per agent call with the current
 
 ## Deployment
 
-NanoClaw runs as a single macOS launchd service.
+MatterBot runs as a single macOS launchd service.
 
 ### Startup Sequence
 
-When NanoClaw starts, it:
-1. **Ensures Docker is running** - Checks Docker daemon; kills orphaned NanoClaw containers from previous runs
+When MatterBot starts, it:
+1. **Ensures Docker is running** - Checks Docker daemon; kills orphaned MatterBot containers from previous runs
 2. Initializes the SQLite database (migrates from JSON files if they exist)
 3. Loads state from SQLite (registered groups, sessions, router state)
 4. Connects to WhatsApp (on `connection.open`):
@@ -494,16 +494,16 @@ When NanoClaw starts, it:
    - Recovers any unprocessed messages from before shutdown
    - Starts the message polling loop
 
-### Service: com.nanoclaw
+### Service: com.matterbot
 
-**launchd/com.nanoclaw.plist:**
+**launchd/com.matterbot.plist:**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nanoclaw</string>
+    <string>com.matterbot</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{NODE_PATH}}</string>
@@ -525,9 +525,9 @@ When NanoClaw starts, it:
         <string>Andy</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>{{PROJECT_ROOT}}/logs/nanoclaw.log</string>
+    <string>{{PROJECT_ROOT}}/logs/matterbot.log</string>
     <key>StandardErrorPath</key>
-    <string>{{PROJECT_ROOT}}/logs/nanoclaw.error.log</string>
+    <string>{{PROJECT_ROOT}}/logs/matterbot.error.log</string>
 </dict>
 </plist>
 ```
@@ -536,19 +536,19 @@ When NanoClaw starts, it:
 
 ```bash
 # Install service
-cp launchd/com.nanoclaw.plist ~/Library/LaunchAgents/
+cp launchd/com.matterbot.plist ~/Library/LaunchAgents/
 
 # Start service
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl load ~/Library/LaunchAgents/com.matterbot.plist
 
 # Stop service
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.matterbot.plist
 
 # Check status
-launchctl list | grep nanoclaw
+launchctl list | grep matterbot
 
 # View logs
-tail -f logs/nanoclaw.log
+tail -f logs/matterbot.log
 ```
 
 ---
@@ -604,7 +604,7 @@ chmod 700 groups/
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| No response to messages | Service not running | Check `launchctl list | grep nanoclaw` |
+| No response to messages | Service not running | Check `launchctl list | grep matterbot` |
 | "Claude Code process exited with code 1" | Docker container failed to start | Check logs; ensure Docker daemon is running |
 | "Claude Code process exited with code 1" | Session mount path wrong | Ensure mount is to `/home/node/.claude/` not `/root/.claude/` |
 | Session not continuing | Session ID not saved | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"` |
@@ -614,8 +614,8 @@ chmod 700 groups/
 
 ### Log Location
 
-- `logs/nanoclaw.log` - stdout
-- `logs/nanoclaw.error.log` - stderr
+- `logs/matterbot.log` - stdout
+- `logs/matterbot.error.log` - stderr
 
 ### Debug Mode
 

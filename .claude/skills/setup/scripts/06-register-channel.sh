@@ -37,7 +37,7 @@ done
 if [ -z "$JID" ] || [ -z "$NAME" ] || [ -z "$TRIGGER" ] || [ -z "$FOLDER" ]; then
   log "ERROR: Missing required args (--jid, --name, --trigger, --folder)"
   cat <<EOF
-=== NANOCLAW SETUP: REGISTER_CHANNEL ===
+=== MATTERBOT SETUP: REGISTER_CHANNEL ===
 STATUS: failed
 ERROR: missing_required_args
 LOG: logs/setup.log
@@ -83,7 +83,7 @@ if [ "$ASSISTANT_NAME" != "Andy" ]; then
 fi
 
 cat <<EOF
-=== NANOCLAW SETUP: REGISTER_CHANNEL ===
+=== MATTERBOT SETUP: REGISTER_CHANNEL ===
 JID: $JID
 NAME: $NAME
 FOLDER: $FOLDER

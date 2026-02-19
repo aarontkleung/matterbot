@@ -87,6 +87,10 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
+  // Optional: edit-in-place status messages (Telegram only)
+  sendStatusMessage?(jid: string, text: string): Promise<number | null>;
+  editMessage?(jid: string, messageId: number, text: string): Promise<void>;
+  deleteMessage?(jid: string, messageId: number): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages

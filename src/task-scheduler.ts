@@ -20,7 +20,8 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { logger } from './logger.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+import { Channel, RegisteredGroup, ScheduledTask } from './types.js';
+import { createStatusState, handleToolUse, cleanupStatusMessage } from './status-message.js';
 
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
@@ -28,6 +29,7 @@ export interface SchedulerDependencies {
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
+  findChannel: (jid: string) => Channel | undefined;
 }
 
 async function runTask(
@@ -102,6 +104,7 @@ async function runTask(
   };
 
   try {
+    const statusState = createStatusState();
     const output = await runContainerAgent(
       group,
       {
@@ -114,7 +117,15 @@ async function runTask(
       },
       (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
       async (streamedOutput: ContainerOutput) => {
+        if (streamedOutput.toolUse) {
+          const ch = deps.findChannel(task.chat_jid);
+          if (ch) await handleToolUse(ch, task.chat_jid, statusState, streamedOutput.toolUse.toolName, streamedOutput.toolUse.summary);
+          return;
+        }
         if (streamedOutput.result) {
+          const ch = deps.findChannel(task.chat_jid);
+          if (ch) await cleanupStatusMessage(ch, task.chat_jid, statusState);
+
           result = streamedOutput.result;
           // Forward result to user (sendMessage handles formatting)
           await deps.sendMessage(task.chat_jid, streamedOutput.result);
@@ -126,6 +137,10 @@ async function runTask(
         }
       },
     );
+
+    // Safety cleanup
+    const cleanupCh = deps.findChannel(task.chat_jid);
+    if (cleanupCh) await cleanupStatusMessage(cleanupCh, task.chat_jid, statusState);
 
     if (idleTimer) clearTimeout(idleTimer);
 

@@ -34,6 +34,7 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  toolUse?: { toolName: string; summary?: string };
 }
 
 interface SessionEntry {
@@ -111,6 +112,38 @@ function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
   console.log(JSON.stringify(output));
   console.log(OUTPUT_END_MARKER);
+}
+
+function formatToolSummary(toolName: string, input: Record<string, unknown>): string | undefined {
+  switch (toolName) {
+    case 'Read':
+      return input.file_path ? String(input.file_path).split('/').pop() : undefined;
+    case 'Write':
+      return input.file_path ? String(input.file_path).split('/').pop() : undefined;
+    case 'Edit':
+      return input.file_path ? String(input.file_path).split('/').pop() : undefined;
+    case 'Bash':
+      if (input.command) {
+        const cmd = String(input.command);
+        return cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd;
+      }
+      return undefined;
+    case 'Grep':
+      return input.pattern ? String(input.pattern) : undefined;
+    case 'Glob':
+      return input.pattern ? String(input.pattern) : undefined;
+    case 'WebSearch':
+      return input.query ? String(input.query) : undefined;
+    case 'WebFetch':
+      if (input.url) {
+        try { return new URL(String(input.url)).hostname; } catch { return String(input.url).slice(0, 40); }
+      }
+      return undefined;
+    case 'Task':
+      return input.description ? String(input.description) : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function log(message: string): void {
@@ -461,6 +494,23 @@ async function runQuery(
 
     if (message.type === 'assistant' && 'uuid' in message) {
       lastAssistantUuid = (message as { uuid: string }).uuid;
+    }
+
+    // Emit tool_use events so the host can show status messages
+    if (message.type === 'assistant' && 'message' in message) {
+      const content = (message as { message?: { content?: unknown[] } }).message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          const b = block as { type?: string; name?: string; input?: Record<string, unknown> };
+          if (b.type === 'tool_use' && b.name) {
+            writeOutput({
+              status: 'success',
+              result: null,
+              toolUse: { toolName: b.name, summary: formatToolSummary(b.name, b.input || {}) },
+            });
+          }
+        }
+      }
     }
 
     if (message.type === 'system' && message.subtype === 'init') {

@@ -39,6 +39,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { formatMessages, findChannel, formatOutbound } from './router.js';
+import { createStatusState, handleToolUse, cleanupStatusMessage } from './status-message.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -177,16 +178,25 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await findChannel(channels, chatJid)?.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
+  const statusState = createStatusState();
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
+    if (result.toolUse) {
+      const ch = findChannel(channels, chatJid);
+      if (ch) await handleToolUse(ch, chatJid, statusState, result.toolUse.toolName, result.toolUse.summary);
+      return;
+    }
     if (result.result) {
+      // Clean up status message before sending the actual response
+      const ch = findChannel(channels, chatJid);
+      if (ch) await cleanupStatusMessage(ch, chatJid, statusState);
+
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        const ch = findChannel(channels, chatJid);
         if (ch) {
           const formatted = formatOutbound(text);
           if (formatted) await ch.sendMessage(chatJid, formatted);
@@ -202,6 +212,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   });
 
+  // Safety cleanup: delete status message if still present
+  const cleanupCh = findChannel(channels, chatJid);
+  if (cleanupCh) await cleanupStatusMessage(cleanupCh, chatJid, statusState);
   await findChannel(channels, chatJid)?.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
 
@@ -489,6 +502,7 @@ async function main(): Promise<void> {
       const text = formatOutbound(rawText);
       if (text) await channel.sendMessage(jid, text);
     },
+    findChannel: (jid) => findChannel(channels, jid),
   });
   startIpcWatcher({
     sendMessage: (jid, text) => {

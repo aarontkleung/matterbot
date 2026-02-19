@@ -43,15 +43,15 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
-## WhatsApp Formatting (and other messaging apps)
+## Message Formatting
 
-Do NOT use markdown headings (##) in WhatsApp messages. Only use:
+Do NOT use markdown headings (##) in messages. Only use:
 - *Bold* (single asterisks) (NEVER **double asterisks**)
 - _Italic_ (underscores)
 - • Bullets (bullet points)
 - ```Code blocks``` (triple backticks)
 
-Keep messages clean and readable for WhatsApp.
+Keep messages clean and readable for messaging apps.
 
 ---
 
@@ -95,7 +95,7 @@ Available groups are provided in `/workspace/ipc/available_groups.json`:
 }
 ```
 
-Groups are ordered by most recent activity. The list is synced from WhatsApp daily.
+Groups are ordered by most recent activity. The list is synced from connected channels daily.
 
 If a group the user mentions isn't in the list, request a fresh sync:
 
@@ -117,28 +117,16 @@ sqlite3 /workspace/project/store/messages.db "
 "
 ```
 
-### Registered Groups Config
+### Registered Groups
 
-Groups are registered in `/workspace/project/data/registered_groups.json`:
-
-```json
-{
-  "1234567890-1234567890@g.us": {
-    "name": "Family Chat",
-    "folder": "family-chat",
-    "trigger": "@Andy",
-    "added_at": "2024-01-31T12:00:00.000Z"
-  }
-}
-```
+Groups are stored in the `registered_groups` table in SQLite. You manage them via IPC task files.
 
 Fields:
-- **Key**: The WhatsApp JID (unique identifier for the chat)
+- **jid**: The chat JID (unique identifier for the chat)
 - **name**: Display name for the group
 - **folder**: Folder name under `groups/` for this group's files and memory
 - **trigger**: The trigger word (usually same as global, but could differ)
 - **requiresTrigger**: Whether `@trigger` prefix is needed (default: `true`). Set to `false` for solo/personal chats where all messages should be processed
-- **added_at**: ISO timestamp when registered
 
 ### Trigger Behavior
 
@@ -148,54 +136,75 @@ Fields:
 
 ### Adding a Group
 
-1. Query the database to find the group's JID
-2. Read `/workspace/project/data/registered_groups.json`
-3. Add the new group entry with `containerConfig` if needed
-4. Write the updated JSON back
-5. Create the group folder: `/workspace/project/groups/{folder-name}/`
-6. Optionally create an initial `CLAUDE.md` for the group
+1. Find the group's JID from `/workspace/ipc/available_groups.json`
+2. Write an IPC task file:
+
+```bash
+cat > /workspace/ipc/tasks/register_$(date +%s).json << 'EOF'
+{
+  "type": "register_group",
+  "jid": "120363336345536173@g.us",
+  "name": "Family Chat",
+  "folder": "family-chat",
+  "trigger": "@Andy"
+}
+EOF
+```
+
+Optional fields: `requiresTrigger` (boolean), `containerConfig` (object).
 
 Example folder name conventions:
 - "Family Chat" → `family-chat`
 - "Work Team" → `work-team`
 - Use lowercase, hyphens instead of spaces
 
+The orchestrator will create the group folder automatically.
+
 #### Adding Additional Directories for a Group
 
-Groups can have extra directories mounted. Add `containerConfig` to their entry:
+Groups can have extra directories mounted. Include `containerConfig` in the register task:
 
-```json
+```bash
+cat > /workspace/ipc/tasks/register_$(date +%s).json << 'EOF'
 {
-  "1234567890@g.us": {
-    "name": "Dev Team",
-    "folder": "dev-team",
-    "trigger": "@Andy",
-    "added_at": "2026-01-31T12:00:00Z",
-    "containerConfig": {
-      "additionalMounts": [
-        {
-          "hostPath": "~/projects/webapp",
-          "containerPath": "webapp",
-          "readonly": false
-        }
-      ]
-    }
+  "type": "register_group",
+  "jid": "120363336345536173@g.us",
+  "name": "Dev Team",
+  "folder": "dev-team",
+  "trigger": "@Andy",
+  "containerConfig": {
+    "additionalMounts": [
+      {
+        "hostPath": "~/projects/webapp",
+        "containerPath": "webapp",
+        "readonly": false
+      }
+    ]
   }
 }
+EOF
 ```
 
 The directory will appear at `/workspace/extra/webapp` in that group's container.
 
 ### Removing a Group
 
-1. Read `/workspace/project/data/registered_groups.json`
-2. Remove the entry for that group
-3. Write the updated JSON back
-4. The group folder and its files remain (don't delete them)
+Write an IPC task file:
+
+```bash
+cat > /workspace/ipc/tasks/unregister_$(date +%s).json << 'EOF'
+{
+  "type": "unregister_group",
+  "jid": "120363336345536173@g.us"
+}
+EOF
+```
+
+The group folder and its files remain (don't delete them).
 
 ### Listing Groups
 
-Read `/workspace/project/data/registered_groups.json` and format it nicely.
+Read `/workspace/ipc/available_groups.json` — each group has an `isRegistered` flag.
 
 ---
 

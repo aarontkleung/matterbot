@@ -29,6 +29,7 @@ import {
   getNewMessages,
   getRouterState,
   initDatabase,
+  deleteRegisteredGroup,
   setRegisteredGroup,
   setRouterState,
   setSession,
@@ -92,6 +93,14 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
     { jid, name: group.name, folder: group.folder },
     'Group registered',
   );
+}
+
+function unregisterGroup(jid: string): boolean {
+  if (!registeredGroups[jid]) return false;
+  delete registeredGroups[jid];
+  deleteRegisteredGroup(jid);
+  logger.info({ jid }, 'Group unregistered');
+  return true;
 }
 
 /**
@@ -489,6 +498,7 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
+    unregisterGroup,
     syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),

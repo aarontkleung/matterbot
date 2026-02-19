@@ -26,20 +26,48 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
 /** Minimum interval between Telegram edits (ms) to respect rate limits */
 const MIN_EDIT_INTERVAL = 1500;
 
+interface ToolEntry { display: string; summary?: string }
+
 export interface StatusState {
   messageId: number | null;
   lastEditTime: number;
   pendingText: string | null;
   debounceTimer: ReturnType<typeof setTimeout> | null;
+  completedTools: ToolEntry[];
+  currentTool: ToolEntry | null;
 }
 
 export function createStatusState(): StatusState {
-  return { messageId: null, lastEditTime: 0, pendingText: null, debounceTimer: null };
+  return {
+    messageId: null,
+    lastEditTime: 0,
+    pendingText: null,
+    debounceTimer: null,
+    completedTools: [],
+    currentTool: null,
+  };
 }
 
-function formatStatusText(toolName: string, summary?: string): string {
-  const display = TOOL_DISPLAY_NAMES[toolName] || `Using ${toolName}`;
-  return summary ? `⏳ ${display}: ${summary}` : `⏳ ${display}`;
+function toolDisplayLine(toolEntry: ToolEntry, prefix: string): string {
+  const suffix = toolEntry.summary ? `: ${toolEntry.summary}` : '';
+  return `${prefix} ${toolEntry.display}${suffix}`;
+}
+
+function formatStatusText(state: StatusState): string {
+  const lines: string[] = [];
+  const completed = state.completedTools;
+  const maxShown = 4;
+
+  if (completed.length > maxShown) {
+    lines.push(`... and ${completed.length - maxShown} more`);
+  }
+  for (const entry of completed.slice(-maxShown)) {
+    lines.push(toolDisplayLine(entry, '✓'));
+  }
+  if (state.currentTool) {
+    lines.push(toolDisplayLine(state.currentTool, '⏳'));
+  }
+  return lines.join('\n');
 }
 
 export async function handleToolUse(
@@ -52,7 +80,14 @@ export async function handleToolUse(
   // Only works for channels that support status messages
   if (!channel.sendStatusMessage || !channel.editMessage) return;
 
-  const text = formatStatusText(toolName, summary);
+  // Move current tool to completed, set new one as current
+  if (state.currentTool) {
+    state.completedTools.push(state.currentTool);
+  }
+  const display = TOOL_DISPLAY_NAMES[toolName] ?? `Using ${toolName}`;
+  state.currentTool = { display, summary };
+
+  const text = formatStatusText(state);
 
   if (state.messageId === null) {
     // First tool use — send a new status message
@@ -66,7 +101,6 @@ export async function handleToolUse(
   const elapsed = now - state.lastEditTime;
 
   if (elapsed >= MIN_EDIT_INTERVAL) {
-    // Enough time has passed, edit immediately
     await channel.editMessage(jid, state.messageId, text);
     state.lastEditTime = Date.now();
     if (state.debounceTimer) {
@@ -74,17 +108,20 @@ export async function handleToolUse(
       state.debounceTimer = null;
     }
   } else {
-    // Too soon — schedule a debounced edit
     state.pendingText = text;
     if (!state.debounceTimer) {
-      state.debounceTimer = setTimeout(async () => {
+      const delay = MIN_EDIT_INTERVAL - elapsed;
+      state.debounceTimer = setTimeout(() => {
         state.debounceTimer = null;
         if (state.pendingText && state.messageId && channel.editMessage) {
-          await channel.editMessage(jid, state.messageId, state.pendingText);
-          state.lastEditTime = Date.now();
-          state.pendingText = null;
+          channel.editMessage(jid, state.messageId, state.pendingText)
+            .then(() => {
+              state.lastEditTime = Date.now();
+              state.pendingText = null;
+            })
+            .catch((err) => logger.debug({ err }, 'Debounced status edit failed'));
         }
-      }, MIN_EDIT_INTERVAL - elapsed);
+      }, delay);
     }
   }
 }
@@ -106,4 +143,6 @@ export async function cleanupStatusMessage(
     }
     state.messageId = null;
   }
+  state.completedTools = [];
+  state.currentTool = null;
 }

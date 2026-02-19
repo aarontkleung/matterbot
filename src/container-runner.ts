@@ -50,6 +50,7 @@ export interface ContainerOutput {
   newSessionId?: string;
   error?: string;
   toolUse?: { toolName: string; summary?: string };
+  thinking?: string;
 }
 
 interface VolumeMount {

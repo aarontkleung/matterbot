@@ -39,7 +39,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { formatMessages, findChannel, formatOutbound } from './router.js';
-import { createStatusState, handleToolUse, cleanupStatusMessage } from './status-message.js';
+import { createStatusState, handleToolUse, handleThinking, cleanupStatusMessage } from './status-message.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -185,6 +185,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.toolUse) {
       const ch = findChannel(channels, chatJid);
       if (ch) await handleToolUse(ch, chatJid, statusState, result.toolUse.toolName, result.toolUse.summary);
+      return;
+    }
+    if (result.thinking) {
+      const ch = findChannel(channels, chatJid);
+      if (ch) await handleThinking(ch, chatJid, statusState, result.thinking);
       return;
     }
     if (result.result) {

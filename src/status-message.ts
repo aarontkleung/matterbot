@@ -35,6 +35,7 @@ export interface StatusState {
   debounceTimer: ReturnType<typeof setTimeout> | null;
   completedTools: ToolEntry[];
   currentTool: ToolEntry | null;
+  thinkingText: string | null;
 }
 
 export function createStatusState(): StatusState {
@@ -45,6 +46,7 @@ export function createStatusState(): StatusState {
     debounceTimer: null,
     completedTools: [],
     currentTool: null,
+    thinkingText: null,
   };
 }
 
@@ -55,6 +57,11 @@ function toolDisplayLine(toolEntry: ToolEntry, prefix: string): string {
 
 function formatStatusText(state: StatusState): string {
   const lines: string[] = [];
+
+  if (state.thinkingText) {
+    lines.push(state.thinkingText);
+  }
+
   const completed = state.completedTools;
   const maxShown = 4;
 
@@ -62,41 +69,29 @@ function formatStatusText(state: StatusState): string {
     lines.push(`... and ${completed.length - maxShown} more`);
   }
   for (const entry of completed.slice(-maxShown)) {
-    lines.push(toolDisplayLine(entry, '✓'));
+    lines.push(toolDisplayLine(entry, '●'));
   }
   if (state.currentTool) {
-    lines.push(toolDisplayLine(state.currentTool, '⏳'));
+    lines.push(toolDisplayLine(state.currentTool, '○'));
   }
   return lines.join('\n');
 }
 
-export async function handleToolUse(
+async function sendOrEditStatus(
   channel: Channel,
   jid: string,
   state: StatusState,
-  toolName: string,
-  summary?: string,
 ): Promise<void> {
-  // Only works for channels that support status messages
   if (!channel.sendStatusMessage || !channel.editMessage) return;
-
-  // Move current tool to completed, set new one as current
-  if (state.currentTool) {
-    state.completedTools.push(state.currentTool);
-  }
-  const display = TOOL_DISPLAY_NAMES[toolName] ?? `Using ${toolName}`;
-  state.currentTool = { display, summary };
 
   const text = formatStatusText(state);
 
   if (state.messageId === null) {
-    // First tool use — send a new status message
     state.messageId = await channel.sendStatusMessage(jid, text);
     state.lastEditTime = Date.now();
     return;
   }
 
-  // Subsequent tool uses — debounced edit
   const now = Date.now();
   const elapsed = now - state.lastEditTime;
 
@@ -126,6 +121,38 @@ export async function handleToolUse(
   }
 }
 
+export async function handleToolUse(
+  channel: Channel,
+  jid: string,
+  state: StatusState,
+  toolName: string,
+  summary?: string,
+): Promise<void> {
+  if (!channel.sendStatusMessage || !channel.editMessage) return;
+
+  if (state.currentTool) {
+    state.completedTools.push(state.currentTool);
+  }
+  const display = TOOL_DISPLAY_NAMES[toolName] ?? `Using ${toolName}`;
+  state.currentTool = { display, summary };
+
+  await sendOrEditStatus(channel, jid, state);
+}
+
+export async function handleThinking(
+  channel: Channel,
+  jid: string,
+  state: StatusState,
+  text: string,
+): Promise<void> {
+  if (!channel.sendStatusMessage || !channel.editMessage) return;
+
+  // Static indicator — raw thinking text is too noisy
+  state.thinkingText = 'Thinking…';
+
+  await sendOrEditStatus(channel, jid, state);
+}
+
 export async function cleanupStatusMessage(
   channel: Channel,
   jid: string,
@@ -145,4 +172,5 @@ export async function cleanupStatusMessage(
   }
   state.completedTools = [];
   state.currentTool = null;
+  state.thinkingText = null;
 }

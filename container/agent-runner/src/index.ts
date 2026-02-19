@@ -35,6 +35,7 @@ interface ContainerOutput {
   newSessionId?: string;
   error?: string;
   toolUse?: { toolName: string; summary?: string };
+  thinking?: string;
 }
 
 interface SessionEntry {
@@ -422,6 +423,7 @@ async function runQuery(
   let lastAssistantUuid: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
+  let thinkingAccum = '';
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
@@ -450,6 +452,8 @@ async function runQuery(
     prompt: stream,
     options: {
       model: sdkEnv.CLAUDE_MODEL || undefined,
+      maxThinkingTokens: (!sdkEnv.CLAUDE_MODEL || sdkEnv.CLAUDE_MODEL.startsWith('claude')) ? 10000 : undefined,
+      includePartialMessages: true,
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
@@ -496,18 +500,49 @@ async function runQuery(
       lastAssistantUuid = (message as { uuid: string }).uuid;
     }
 
-    // Emit tool_use events so the host can show status messages
+    // Real-time thinking from streaming events
+    if (message.type === 'stream_event' && 'event' in message) {
+      const event = (message as { event: { type: string; [k: string]: unknown } }).event;
+      if (event.type === 'content_block_delta') {
+        const delta = event.delta as { type?: string; text?: string; thinking?: string };
+        if (delta.type === 'thinking_delta' && delta.thinking) {
+          thinkingAccum += delta.thinking;
+        }
+        if (delta.type === 'text_delta' && delta.text) {
+          thinkingAccum += delta.text;
+        }
+        // Throttle: emit every 200 chars accumulated
+        if (thinkingAccum.length >= 200) {
+          writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
+          thinkingAccum = '';
+        }
+      }
+      if (event.type === 'content_block_stop') {
+        if (thinkingAccum) {
+          writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
+          thinkingAccum = '';
+        }
+      }
+      if (event.type === 'content_block_start') {
+        thinkingAccum = '';
+      }
+    }
+
+    // Emit tool_use and thinking events so the host can show status messages
     if (message.type === 'assistant' && 'message' in message) {
       const content = (message as { message?: { content?: unknown[] } }).message?.content;
       if (Array.isArray(content)) {
         for (const block of content) {
-          const b = block as { type?: string; name?: string; input?: Record<string, unknown> };
+          const b = block as { type?: string; name?: string; input?: Record<string, unknown>; thinking?: string };
           if (b.type === 'tool_use' && b.name) {
             writeOutput({
               status: 'success',
               result: null,
               toolUse: { toolName: b.name, summary: formatToolSummary(b.name, b.input || {}) },
             });
+          }
+          if (b.type === 'thinking' && b.thinking) {
+            writeOutput({ status: 'success', result: null, thinking: b.thinking });
           }
         }
       }

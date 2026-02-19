@@ -197,13 +197,19 @@ export class WhatsAppChannel implements Channel {
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
+    // Convert markdown bold to WhatsApp bold (*text*)
+    const converted = text
+      .replace(/\*\*(.+?)\*\*/g, '*$1*')
+      .replace(/__(.+?)__/g, '*$1*')
+      .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+      .replace(/^---+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n');
+
     // Prefix bot messages with assistant name so users know who's speaking.
-    // On a shared number, prefix is also needed in DMs (including self-chat)
-    // to distinguish bot output from user messages.
-    // Skip only when the assistant has its own dedicated phone number.
     const prefixed = ASSISTANT_HAS_OWN_NUMBER
-      ? text
-      : `${ASSISTANT_NAME}: ${text}`;
+      ? converted
+      : `${ASSISTANT_NAME}: ${converted}`;
 
     if (!this.connected) {
       this.outgoingQueue.push({ jid, text: prefixed });

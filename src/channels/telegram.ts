@@ -7,6 +7,45 @@ import {
 import { logger } from '../logger.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
+function escapeMarkdownV2(text: string): string {
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+}
+
+function markdownToTelegramV2(text: string): string {
+  // Protect code blocks and inline code from escaping
+  const protected_: string[] = [];
+  const ph = (s: string) => { protected_.push(s); return `\x00${protected_.length - 1}\x00`; };
+
+  let result = text
+    // Remove horizontal rules early
+    .replace(/^---+$/gm, '')
+    // Protect fenced code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => ph(`\`\`\`${lang}\n${code}\`\`\``))
+    // Protect inline code
+    .replace(/`([^`]+)`/g, (_, code) => ph(`\`${code}\``));
+
+  // Extract markdown constructs, escape their content, wrap in MarkdownV2 tags
+  // Bold: **text** or __text__
+  result = result
+    .replace(/\*\*(.+?)\*\*/g, (_, c) => ph(`*${escapeMarkdownV2(c)}*`))
+    .replace(/__(.+?)__/g, (_, c) => ph(`*${escapeMarkdownV2(c)}*`));
+  // Headings → bold
+  result = result.replace(/^#{1,6}\s+(.+)$/gm, (_, c) => ph(`*${escapeMarkdownV2(c)}*`));
+  // Links
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
+    ph(`[${escapeMarkdownV2(t)}](${u})`));
+
+  // Escape everything else
+  result = escapeMarkdownV2(result);
+
+  // Restore protected sections
+  for (let i = 0; i < protected_.length; i++) {
+    result = result.replace(`\x00${i}\x00`, protected_[i]);
+  }
+
+  return result.replace(/\n{3,}/g, '\n\n');
+}
+
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
@@ -169,12 +208,21 @@ export class TelegramChannel implements Channel {
 
     try {
       const numericId = jid.replace(/^tg:/, '');
+      const formatted = markdownToTelegramV2(text);
       const MAX_LENGTH = 4096;
-      if (text.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, text);
+      const send = async (chunk: string) => {
+        try {
+          await this.bot!.api.sendMessage(numericId, chunk, { parse_mode: 'MarkdownV2' });
+        } catch {
+          // Fallback to plain text if MarkdownV2 parsing fails
+          await this.bot!.api.sendMessage(numericId, text.length <= MAX_LENGTH ? text : chunk);
+        }
+      };
+      if (formatted.length <= MAX_LENGTH) {
+        await send(formatted);
       } else {
-        for (let i = 0; i < text.length; i += MAX_LENGTH) {
-          await this.bot.api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH));
+        for (let i = 0; i < formatted.length; i += MAX_LENGTH) {
+          await send(formatted.slice(i, i + MAX_LENGTH));
         }
       }
       logger.info({ jid, length: text.length }, 'Telegram message sent');

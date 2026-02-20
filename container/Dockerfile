@@ -33,6 +33,13 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Install global CLI tools (agent-browser, claude-code, notion MCP server)
 RUN npm install -g agent-browser @anthropic-ai/claude-code @notionhq/notion-mcp-server
 
+# Rebuild notion-mcp-server from source (published binary is missing deserializeParams fix)
+# See: https://github.com/makenotion/notion-mcp-server/issues/176
+RUN cd /usr/local/lib/node_modules/@notionhq/notion-mcp-server \
+    && npm install --save-dev esbuild \
+    && node scripts/build-cli.js \
+    && npm prune --production
+
 # Create app directory
 WORKDIR /app
 

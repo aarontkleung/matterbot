@@ -12,6 +12,16 @@ function escapeMarkdownV2(text: string): string {
   return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
 }
 
+/** Escape only ` and \ inside code/pre blocks per MarkdownV2 spec. */
+function escapeCodeContent(text: string): string {
+  return text.replace(/([`\\])/g, '\\$1');
+}
+
+/** Escape only ) and \ inside URL portions per MarkdownV2 spec. */
+function escapeUrl(url: string): string {
+  return url.replace(/([)\\])/g, '\\$1');
+}
+
 function markdownToTelegramV2(text: string): string {
   // Convert markdown tables to code blocks before escaping
   const tableConverted = convertMarkdownTables(text);
@@ -23,23 +33,41 @@ function markdownToTelegramV2(text: string): string {
   let result = tableConverted
     // Remove horizontal rules early
     .replace(/^---+$/gm, '')
-    // Convert numbered lists to bullets (Telegram auto-renumbers them)
+    // Convert numbered lists to bullets
     .replace(/^\d+\.\s+/gm, '• ')
-    // Protect fenced code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => ph(`\`\`\`${lang}\n${code}\`\`\``))
-    // Protect inline code
-    .replace(/`([^`]+)`/g, (_, code) => ph(`\`${code}\``));
+    // Convert unordered list markers to bullets
+    .replace(/^[\-*]\s+/gm, '• ')
+    // Protect fenced code blocks (escape ` and \ inside)
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      ph(`\`\`\`${lang}\n${escapeCodeContent(code)}\`\`\``))
+    // Protect inline code (escape ` and \ inside)
+    .replace(/`([^`]+)`/g, (_, code) => ph(`\`${escapeCodeContent(code)}\``));
 
   // Extract markdown constructs, escape their content, wrap in MarkdownV2 tags
-  // Bold: **text** or __text__
-  result = result
-    .replace(/\*\*(.+?)\*\*/g, (_, c) => ph(`*${escapeMarkdownV2(c)}*`))
-    .replace(/__(.+?)__/g, (_, c) => ph(`*${escapeMarkdownV2(c)}*`));
+
+  // Bold+italic: ***text***
+  result = result.replace(/\*\*\*(.+?)\*\*\*/g, (_, c) =>
+    ph(`*_${escapeMarkdownV2(c)}_*`));
+  // Bold: **text**
+  result = result.replace(/\*\*(.+?)\*\*/g, (_, c) =>
+    ph(`*${escapeMarkdownV2(c)}*`));
+  // Strikethrough: ~~text~~
+  result = result.replace(/~~(.+?)~~/g, (_, c) =>
+    ph(`~${escapeMarkdownV2(c)}~`));
+  // Italic: *text* or _text_ (single markers)
+  result = result.replace(/\*(.+?)\*/g, (_, c) =>
+    ph(`_${escapeMarkdownV2(c)}_`));
+  result = result.replace(/(?<!\w)_(.+?)_(?!\w)/g, (_, c) =>
+    ph(`_${escapeMarkdownV2(c)}_`));
   // Headings → bold
-  result = result.replace(/^#{1,6}\s+(.+)$/gm, (_, c) => ph(`*${escapeMarkdownV2(c)}*`));
-  // Links
+  result = result.replace(/^#{1,6}\s+(.+)$/gm, (_, c) =>
+    ph(`*${escapeMarkdownV2(c)}*`));
+  // Links (escape URL properly)
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
-    ph(`[${escapeMarkdownV2(t)}](${u})`));
+    ph(`[${escapeMarkdownV2(t)}](${escapeUrl(u)})`));
+  // Blockquotes: > text → MarkdownV2 blockquote
+  result = result.replace(/^>\s?(.*)$/gm, (_, c) =>
+    ph(`>${escapeMarkdownV2(c)}`));
 
   // Escape everything else
   result = escapeMarkdownV2(result);

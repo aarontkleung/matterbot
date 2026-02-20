@@ -118,28 +118,22 @@ function writeOutput(output: ContainerOutput): void {
 function formatToolSummary(toolName: string, input: Record<string, unknown>): string | undefined {
   switch (toolName) {
     case 'Read':
-      return input.file_path ? String(input.file_path).split('/').pop() : undefined;
     case 'Write':
-      return input.file_path ? String(input.file_path).split('/').pop() : undefined;
     case 'Edit':
       return input.file_path ? String(input.file_path).split('/').pop() : undefined;
-    case 'Bash':
-      if (input.command) {
-        const cmd = String(input.command);
-        return cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd;
-      }
-      return undefined;
+    case 'Bash': {
+      if (!input.command) return undefined;
+      const cmd = String(input.command);
+      return cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd;
+    }
     case 'Grep':
-      return input.pattern ? String(input.pattern) : undefined;
     case 'Glob':
       return input.pattern ? String(input.pattern) : undefined;
     case 'WebSearch':
       return input.query ? String(input.query) : undefined;
     case 'WebFetch':
-      if (input.url) {
-        try { return new URL(String(input.url)).hostname; } catch { return String(input.url).slice(0, 40); }
-      }
-      return undefined;
+      if (!input.url) return undefined;
+      try { return new URL(String(input.url)).hostname; } catch { return String(input.url).slice(0, 40); }
     case 'Task':
       return input.description ? String(input.description) : undefined;
     default:
@@ -505,25 +499,15 @@ async function runQuery(
       const event = (message as { event: { type: string; [k: string]: unknown } }).event;
       if (event.type === 'content_block_delta') {
         const delta = event.delta as { type?: string; text?: string; thinking?: string };
-        if (delta.type === 'thinking_delta' && delta.thinking) {
-          thinkingAccum += delta.thinking;
-        }
-        if (delta.type === 'text_delta' && delta.text) {
-          thinkingAccum += delta.text;
-        }
+        const text = delta.thinking || delta.text;
+        if (text) thinkingAccum += text;
         // Throttle: emit every 200 chars accumulated
         if (thinkingAccum.length >= 200) {
           writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
           thinkingAccum = '';
         }
-      }
-      if (event.type === 'content_block_stop') {
-        if (thinkingAccum) {
-          writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
-          thinkingAccum = '';
-        }
-      }
-      if (event.type === 'content_block_start') {
+      } else if (event.type === 'content_block_stop' && thinkingAccum) {
+        writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
         thinkingAccum = '';
       }
     }

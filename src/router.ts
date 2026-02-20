@@ -20,10 +20,34 @@ export function stripInternalTags(text: string): string {
   return text.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
 }
 
+/** Convert markdown tables to aligned code blocks for chat platforms. */
+export function convertMarkdownTables(text: string): string {
+  return text.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
+    const rows = tableBlock.trim().split('\n');
+    const parsed = rows
+      .filter(row => !/^\|[\s\-:|]+\|$/.test(row))
+      .map(row =>
+        row.split('|').slice(1, -1).map(cell => cell.trim()),
+      );
+    if (parsed.length === 0) return tableBlock;
+
+    const colCount = Math.max(...parsed.map(r => r.length));
+    const widths = Array(colCount).fill(0) as number[];
+    for (const row of parsed) {
+      for (let i = 0; i < row.length; i++) {
+        widths[i] = Math.max(widths[i], row[i].length);
+      }
+    }
+
+    const formatted = parsed
+      .map(row => row.map((cell, i) => cell.padEnd(widths[i])).join('  '))
+      .join('\n');
+    return '```\n' + formatted + '\n```';
+  });
+}
+
 export function formatOutbound(rawText: string): string {
-  const text = stripInternalTags(rawText);
-  if (!text) return '';
-  return text;
+  return stripInternalTags(rawText);
 }
 
 export function routeOutbound(

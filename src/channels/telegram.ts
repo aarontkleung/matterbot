@@ -5,6 +5,7 @@ import {
   TRIGGER_PATTERN,
 } from '../config.js';
 import { logger } from '../logger.js';
+import { convertMarkdownTables } from '../router.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
 function escapeMarkdownV2(text: string): string {
@@ -12,13 +13,18 @@ function escapeMarkdownV2(text: string): string {
 }
 
 function markdownToTelegramV2(text: string): string {
+  // Convert markdown tables to code blocks before escaping
+  const tableConverted = convertMarkdownTables(text);
+
   // Protect code blocks and inline code from escaping
   const protected_: string[] = [];
   const ph = (s: string) => { protected_.push(s); return `\x00${protected_.length - 1}\x00`; };
 
-  let result = text
+  let result = tableConverted
     // Remove horizontal rules early
     .replace(/^---+$/gm, '')
+    // Convert numbered lists to bullets (Telegram auto-renumbers them)
+    .replace(/^\d+\.\s+/gm, '• ')
     // Protect fenced code blocks
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => ph(`\`\`\`${lang}\n${code}\`\`\``))
     // Protect inline code
@@ -44,6 +50,10 @@ function markdownToTelegramV2(text: string): string {
   }
 
   return result.replace(/\n{3,}/g, '\n\n');
+}
+
+function numericId(jid: string): string {
+  return jid.replace(/^tg:/, '');
 }
 
 export interface TelegramChannelOpts {
@@ -207,25 +217,54 @@ export class TelegramChannel implements Channel {
     }
 
     try {
-      const numericId = jid.replace(/^tg:/, '');
+      const chatId = numericId(jid);
       const formatted = markdownToTelegramV2(text);
       const MAX_LENGTH = 4096;
-      const send = async (chunk: string) => {
-        try {
-          await this.bot!.api.sendMessage(numericId, chunk, { parse_mode: 'MarkdownV2' });
-        } catch {
-          // Fallback to plain text if MarkdownV2 parsing fails
-          await this.bot!.api.sendMessage(numericId, text.length <= MAX_LENGTH ? text : chunk);
+
+      const send = async (chunk: string, plainChunk: string) => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await this.bot!.api.sendMessage(chatId, chunk, { parse_mode: 'MarkdownV2' });
+            return;
+          } catch (err: unknown) {
+            const ge = err as { error_code?: number; parameters?: { retry_after?: number } };
+            if (ge.error_code === 429 && ge.parameters?.retry_after) {
+              const delay = ge.parameters.retry_after * 1000 + 500;
+              logger.debug({ delay, attempt }, 'Telegram rate limited, retrying');
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+            // MarkdownV2 parse error — fall back to plain text chunk
+            await this.bot!.api.sendMessage(chatId, plainChunk);
+            return;
+          }
         }
       };
-      if (formatted.length <= MAX_LENGTH) {
-        await send(formatted);
-      } else {
-        for (let i = 0; i < formatted.length; i += MAX_LENGTH) {
-          await send(formatted.slice(i, i + MAX_LENGTH));
+
+      // Split both formatted and plain text at newline boundaries
+      const splitLines = (input: string) => {
+        const result: string[] = [];
+        let current = '';
+        for (const line of input.split('\n')) {
+          if (current.length + line.length + 1 > MAX_LENGTH && current) {
+            result.push(current);
+            current = line;
+          } else {
+            current += (current ? '\n' : '') + line;
+          }
         }
+        if (current) result.push(current);
+        return result;
+      };
+
+      const chunks = splitLines(formatted);
+      const plainChunks = splitLines(text);
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 1000));
+        await send(chunks[i], plainChunks[i] || chunks[i]);
       }
-      logger.info({ jid, length: text.length }, 'Telegram message sent');
+      logger.info({ jid, length: text.length, chunks: chunks.length }, 'Telegram message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
     }
@@ -250,8 +289,7 @@ export class TelegramChannel implements Channel {
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
     if (!this.bot || !isTyping) return;
     try {
-      const numericId = jid.replace(/^tg:/, '');
-      await this.bot.api.sendChatAction(numericId, 'typing');
+      await this.bot.api.sendChatAction(numericId(jid), 'typing');
     } catch (err) {
       logger.debug({ jid, err }, 'Failed to send Telegram typing indicator');
     }
@@ -260,8 +298,7 @@ export class TelegramChannel implements Channel {
   async sendStatusMessage(jid: string, text: string): Promise<number | null> {
     if (!this.bot) return null;
     try {
-      const numericId = jid.replace(/^tg:/, '');
-      const msg = await this.bot.api.sendMessage(numericId, text);
+      const msg = await this.bot.api.sendMessage(numericId(jid), text);
       return msg.message_id;
     } catch (err) {
       logger.debug({ jid, err }, 'Failed to send Telegram status message');
@@ -272,8 +309,7 @@ export class TelegramChannel implements Channel {
   async editMessage(jid: string, messageId: number, text: string): Promise<void> {
     if (!this.bot) return;
     try {
-      const numericId = jid.replace(/^tg:/, '');
-      await this.bot.api.editMessageText(numericId, messageId, text);
+      await this.bot.api.editMessageText(numericId(jid), messageId, text);
     } catch (err) {
       // Telegram returns 400 if text is unchanged — safe to ignore
       logger.debug({ jid, messageId, err }, 'Failed to edit Telegram message');
@@ -283,8 +319,7 @@ export class TelegramChannel implements Channel {
   async deleteMessage(jid: string, messageId: number): Promise<void> {
     if (!this.bot) return;
     try {
-      const numericId = jid.replace(/^tg:/, '');
-      await this.bot.api.deleteMessage(numericId, messageId);
+      await this.bot.api.deleteMessage(numericId(jid), messageId);
     } catch (err) {
       logger.debug({ jid, messageId, err }, 'Failed to delete Telegram message');
     }

@@ -2,6 +2,8 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+import { convertMarkdownTables } from '../router.js';
+
 import makeWASocket, {
   Browsers,
   DisconnectReason,
@@ -197,8 +199,8 @@ export class WhatsAppChannel implements Channel {
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
-    // Convert markdown bold to WhatsApp bold (*text*)
-    const converted = text
+    // Convert markdown tables to code blocks, then bold to WhatsApp bold
+    const converted = convertMarkdownTables(text)
       .replace(/\*\*(.+?)\*\*/g, '*$1*')
       .replace(/__(.+?)__/g, '*$1*')
       .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')

@@ -143,7 +143,6 @@ export async function handleThinking(
   channel: Channel,
   jid: string,
   state: StatusState,
-  text: string,
 ): Promise<void> {
   if (!channel.sendStatusMessage || !channel.editMessage) return;
 

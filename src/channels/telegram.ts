@@ -60,6 +60,7 @@ export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  onClear: (chatJid: string) => Promise<string>;
 }
 
 export class TelegramChannel implements Channel {
@@ -93,6 +94,12 @@ export class TelegramChannel implements Channel {
 
     this.bot.command('ping', (ctx) => {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
+    });
+
+    this.bot.command('clear', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const result = await this.opts.onClear(chatJid);
+      await ctx.reply(result);
     });
 
     this.bot.on('message:text', async (ctx) => {

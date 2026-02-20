@@ -30,6 +30,7 @@ import {
   getRouterState,
   initDatabase,
   deleteRegisteredGroup,
+  deleteSession,
   setRegisteredGroup,
   setRouterState,
   setSession,
@@ -102,6 +103,27 @@ function unregisterGroup(jid: string): boolean {
   deleteRegisteredGroup(jid);
   logger.info({ jid }, 'Group unregistered');
   return true;
+}
+
+async function clearGroupSession(chatJid: string): Promise<string> {
+  const group = registeredGroups[chatJid];
+  if (!group) return 'This chat is not registered.';
+
+  queue.closeStdin(chatJid);
+  delete sessions[group.folder];
+  deleteSession(group.folder);
+
+  const sessionDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
+  if (fs.existsSync(sessionDir)) {
+    const keep = new Set(['settings.json', 'skills']);
+    for (const entry of fs.readdirSync(sessionDir)) {
+      if (keep.has(entry)) continue;
+      fs.rmSync(path.join(sessionDir, entry), { recursive: true, force: true });
+    }
+  }
+
+  logger.info({ chatJid, group: group.name }, 'Session cleared');
+  return `Session cleared for ${group.name}. Next message starts fresh.`;
 }
 
 /**
@@ -477,6 +499,7 @@ async function main(): Promise<void> {
     onChatMetadata: (chatJid: string, timestamp: string, name?: string) =>
       storeChatMetadata(chatJid, timestamp, name),
     registeredGroups: () => registeredGroups,
+    onClear: (chatJid: string) => clearGroupSession(chatJid),
   };
 
   // Create and connect channels

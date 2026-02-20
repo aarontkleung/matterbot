@@ -112,6 +112,7 @@ function createTestOpts(overrides?: Partial<WhatsAppChannelOpts>): WhatsAppChann
         added_at: '2024-01-01T00:00:00.000Z',
       },
     })),
+    onClear: vi.fn(async () => 'Session cleared.'),
     ...overrides,
   };
 }

@@ -27,6 +27,7 @@ export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  onClear: (chatJid: string) => Promise<string>;
 }
 
 export class WhatsAppChannel implements Channel {
@@ -182,6 +183,14 @@ export class WhatsAppChannel implements Channel {
           const isBotMessage = ASSISTANT_HAS_OWN_NUMBER
             ? fromMe
             : content.startsWith(`${ASSISTANT_NAME}:`);
+
+          if (content.trim() === '/clear') {
+            const result = await this.opts.onClear(chatJid);
+            await this.sock.sendMessage(chatJid, { text: result }).catch((err) =>
+              logger.debug({ chatJid, err }, 'Failed to send /clear reply'),
+            );
+            continue;
+          }
 
           this.opts.onMessage(chatJid, {
             id: msg.key.id || '',

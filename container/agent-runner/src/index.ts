@@ -446,7 +446,7 @@ async function runQuery(
     prompt: stream,
     options: {
       model: sdkEnv.CLAUDE_MODEL || undefined,
-      maxThinkingTokens: (!sdkEnv.CLAUDE_MODEL || sdkEnv.CLAUDE_MODEL.startsWith('claude')) ? 10000 : undefined,
+      maxThinkingTokens: 10000,
       includePartialMessages: true,
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,

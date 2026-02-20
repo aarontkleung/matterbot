@@ -102,7 +102,7 @@ export class TelegramChannel implements Channel {
         const result = await this.opts.onClear(chatJid);
         await ctx.reply(result);
       } catch (err) {
-        logger.error({ chatJid, err }, 'Failed to handle /clear');
+        logger.error({ chatJid, err }, 'Failed to handle /reset');
         await ctx.reply('Failed to clear session.').catch(() => {});
       }
     });

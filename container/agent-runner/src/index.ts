@@ -418,6 +418,11 @@ async function runQuery(
   let messageCount = 0;
   let resultCount = 0;
   let thinkingAccum = '';
+  const flushThinking = () => {
+    if (!thinkingAccum) return;
+    writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
+    thinkingAccum = '';
+  };
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
@@ -494,7 +499,7 @@ async function runQuery(
     }
   })) {
     messageCount++;
-    const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
+    const msgType = message.type === 'system' ? `system/${message.subtype}` : message.type;
     log(`[msg #${messageCount}] type=${msgType}`);
 
     if (message.type === 'assistant' && 'uuid' in message) {
@@ -510,12 +515,10 @@ async function runQuery(
         if (text) thinkingAccum += text;
         // Throttle: emit every 200 chars accumulated
         if (thinkingAccum.length >= 200) {
-          writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
-          thinkingAccum = '';
+          flushThinking();
         }
-      } else if (event.type === 'content_block_stop' && thinkingAccum) {
-        writeOutput({ status: 'success', result: null, thinking: thinkingAccum });
-        thinkingAccum = '';
+      } else if (event.type === 'content_block_stop') {
+        flushThinking();
       }
     }
 
@@ -544,14 +547,14 @@ async function runQuery(
       log(`Session initialized: ${newSessionId}`);
     }
 
-    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
+    if (message.type === 'system' && message.subtype === 'task_notification') {
       const tn = message as { task_id: string; status: string; summary: string };
       log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
     }
 
     if (message.type === 'result') {
       resultCount++;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
+      const textResult = (message as { result?: string }).result || null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
       writeOutput({
         status: 'success',

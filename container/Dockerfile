@@ -30,8 +30,8 @@ RUN apt-get update && apt-get install -y \
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install agent-browser and claude-code globally
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+# Install global CLI tools (agent-browser, claude-code, notion MCP server)
+RUN npm install -g agent-browser @anthropic-ai/claude-code @notionhq/notion-mcp-server
 
 # Create app directory
 WORKDIR /app

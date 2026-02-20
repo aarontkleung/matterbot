@@ -215,7 +215,7 @@ function createPreCompactHook(): HookCallback {
 // Secrets to strip from Bash tool subprocess environments.
 // These are needed by claude-code for API auth but should never
 // be visible to commands Kit runs.
-const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL'];
+const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'NOTION_TOKEN'];
 
 function createSanitizeBashHook(): HookCallback {
   return async (input, _toolUseId, _context) => {
@@ -463,7 +463,8 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__matterbot__*'
+        'mcp__matterbot__*',
+        'mcp__notion__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -479,6 +480,12 @@ async function runQuery(
             MATTERBOT_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(sdkEnv.NOTION_TOKEN ? {
+          notion: {
+            command: 'notion-mcp-server',
+            env: { NOTION_TOKEN: sdkEnv.NOTION_TOKEN },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook()] }],

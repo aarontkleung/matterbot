@@ -96,10 +96,15 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
-    this.bot.command('clear', async (ctx) => {
+    this.bot.command('reset', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const result = await this.opts.onClear(chatJid);
-      await ctx.reply(result);
+      try {
+        const result = await this.opts.onClear(chatJid);
+        await ctx.reply(result);
+      } catch (err) {
+        logger.error({ chatJid, err }, 'Failed to handle /clear');
+        await ctx.reply('Failed to clear session.').catch(() => {});
+      }
     });
 
     this.bot.on('message:text', async (ctx) => {

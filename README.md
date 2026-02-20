@@ -74,6 +74,14 @@ From the main channel (your self-chat), you can manage groups and tasks:
 @Andy join the Family Chat group
 ```
 
+## Telegram Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/chatid` | Shows the chat ID for group registration |
+| `/ping` | Checks if the bot is online |
+| `/reset` | Clears the agent session and starts fresh |
+
 ## Customizing
 
 There are no configuration files to learn. Just tell Claude Code what you want:

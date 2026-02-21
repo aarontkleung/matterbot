@@ -8,74 +8,60 @@ import { logger } from '../logger.js';
 import { convertMarkdownTables } from '../router.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
-function escapeMarkdownV2(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Escape only ` and \ inside code/pre blocks per MarkdownV2 spec. */
-function escapeCodeContent(text: string): string {
-  return text.replace(/([`\\])/g, '\\$1');
-}
-
-/** Escape only ) and \ inside URL portions per MarkdownV2 spec. */
-function escapeUrl(url: string): string {
-  return url.replace(/([)\\])/g, '\\$1');
-}
-
-function markdownToTelegramV2(text: string): string {
-  // Convert markdown tables to code blocks before escaping
+function markdownToTelegramHtml(text: string): string {
   const tableConverted = convertMarkdownTables(text);
 
-  // Protect code blocks and inline code from escaping
   const protected_: string[] = [];
   const ph = (s: string) => { protected_.push(s); return `\x00${protected_.length - 1}\x00`; };
 
   let result = tableConverted
-    // Remove horizontal rules early
     .replace(/^---+$/gm, '')
-    // Convert numbered lists to bullets
     .replace(/^\d+\.\s+/gm, '• ')
-    // Convert unordered list markers to bullets
-    .replace(/^[\-*]\s+/gm, '• ')
-    // Protect fenced code blocks (escape ` and \ inside)
+    .replace(/^[-*]\s+/gm, '• ')
+    // Fenced code blocks
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
-      ph(`\`\`\`${lang}\n${escapeCodeContent(code)}\`\`\``))
-    // Protect inline code (escape ` and \ inside)
-    .replace(/`([^`]+)`/g, (_, code) => ph(`\`${escapeCodeContent(code)}\``));
+      lang
+        ? ph(`<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`)
+        : ph(`<pre>${escapeHtml(code)}</pre>`))
+    // Inline code
+    .replace(/`([^`]+)`/g, (_, code) => ph(`<code>${escapeHtml(code)}</code>`));
 
-  // Extract markdown constructs, escape their content, wrap in MarkdownV2 tags
-
-  // Bold+italic: ***text***
+  // Bold+italic
   result = result.replace(/\*\*\*(.+?)\*\*\*/g, (_, c) =>
-    ph(`*_${escapeMarkdownV2(c)}_*`));
-  // Bold: **text**
+    ph(`<b><i>${escapeHtml(c)}</i></b>`));
+  // Bold
   result = result.replace(/\*\*(.+?)\*\*/g, (_, c) =>
-    ph(`*${escapeMarkdownV2(c)}*`));
-  // Strikethrough: ~~text~~
+    ph(`<b>${escapeHtml(c)}</b>`));
+  // Strikethrough
   result = result.replace(/~~(.+?)~~/g, (_, c) =>
-    ph(`~${escapeMarkdownV2(c)}~`));
-  // Italic: *text* or _text_ (single markers)
+    ph(`<s>${escapeHtml(c)}</s>`));
+  // Italic
   result = result.replace(/\*(.+?)\*/g, (_, c) =>
-    ph(`_${escapeMarkdownV2(c)}_`));
+    ph(`<i>${escapeHtml(c)}</i>`));
   result = result.replace(/(?<!\w)_(.+?)_(?!\w)/g, (_, c) =>
-    ph(`_${escapeMarkdownV2(c)}_`));
+    ph(`<i>${escapeHtml(c)}</i>`));
   // Headings → bold
   result = result.replace(/^#{1,6}\s+(.+)$/gm, (_, c) =>
-    ph(`*${escapeMarkdownV2(c)}*`));
-  // Links (escape URL properly)
+    ph(`<b>${escapeHtml(c)}</b>`));
+  // Links
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
-    ph(`[${escapeMarkdownV2(t)}](${escapeUrl(u)})`));
-  // Blockquotes: > text → MarkdownV2 blockquote
+    ph(`<a href="${u.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">${escapeHtml(t)}</a>`));
+  // Blockquotes
   result = result.replace(/^>\s?(.*)$/gm, (_, c) =>
-    ph(`>${escapeMarkdownV2(c)}`));
+    ph(`<blockquote>${escapeHtml(c)}</blockquote>`));
 
-  // Escape everything else
-  result = escapeMarkdownV2(result);
+  result = escapeHtml(result);
 
-  // Restore protected sections
   for (let i = 0; i < protected_.length; i++) {
     result = result.replace(`\x00${i}\x00`, protected_[i]);
   }
+
+  // Merge consecutive blockquotes into one
+  result = result.replace(/<\/blockquote>\n<blockquote>/g, '\n');
 
   return result.replace(/\n{3,}/g, '\n\n');
 }
@@ -115,8 +101,8 @@ export class TelegramChannel implements Channel {
           : (ctx.chat as any).title || 'Unknown';
 
       ctx.reply(
-        `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
-        { parse_mode: 'Markdown' },
+        `Chat ID: <code>tg:${chatId}</code>\nName: ${escapeHtml(chatName)}\nType: ${chatType}`,
+        { parse_mode: 'HTML' },
       );
     });
 
@@ -258,13 +244,13 @@ export class TelegramChannel implements Channel {
 
     try {
       const chatId = numericId(jid);
-      const formatted = markdownToTelegramV2(text);
+      const formatted = markdownToTelegramHtml(text);
       const MAX_LENGTH = 4096;
 
       const send = async (chunk: string, plainChunk: string) => {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            await this.bot!.api.sendMessage(chatId, chunk, { parse_mode: 'MarkdownV2' });
+            await this.bot!.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
             return;
           } catch (err: unknown) {
             const ge = err as { error_code?: number; parameters?: { retry_after?: number } };
@@ -274,7 +260,7 @@ export class TelegramChannel implements Channel {
               await new Promise(r => setTimeout(r, delay));
               continue;
             }
-            // MarkdownV2 parse error — fall back to plain text chunk
+            // HTML parse error — fall back to plain text chunk
             await this.bot!.api.sendMessage(chatId, plainChunk);
             return;
           }

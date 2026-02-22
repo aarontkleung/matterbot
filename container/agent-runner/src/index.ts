@@ -475,6 +475,7 @@ async function runQuery(
         'NotebookEdit',
         'mcp__matterbot__*',
         'mcp__notion__*',
+        'mcp__google_workspace__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -494,6 +495,12 @@ async function runQuery(
           notion: {
             command: 'notion-mcp-server',
             env: { NOTION_TOKEN: sdkEnv.NOTION_TOKEN },
+          },
+        } : {}),
+        ...(fs.existsSync('/home/node/.google-mcp/credentials.json') ? {
+          google_workspace: {
+            command: 'google-workspace-mcp',
+            args: ['serve'],
           },
         } : {}),
       },

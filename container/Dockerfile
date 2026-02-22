@@ -30,8 +30,8 @@ RUN apt-get update && apt-get install -y \
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install global CLI tools (agent-browser, claude-code, notion MCP server)
-RUN npm install -g agent-browser @anthropic-ai/claude-code @notionhq/notion-mcp-server
+# Install global CLI tools (agent-browser, claude-code, notion MCP server, google workspace MCP)
+RUN npm install -g agent-browser @anthropic-ai/claude-code @notionhq/notion-mcp-server google-workspace-mcp
 
 # Rebuild notion-mcp-server from source (published binary is missing deserializeParams fix)
 # See: https://github.com/makenotion/notion-mcp-server/issues/176

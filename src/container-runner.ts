@@ -161,6 +161,17 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Google Workspace MCP credentials (read-only, only if config dir exists on host)
+  // Mount at both /home/node/.google-mcp (container user home) and the host absolute path
+  // because accounts.json stores absolute host paths for token files
+  const googleMcpDir = path.join(homeDir, '.google-mcp');
+  if (fs.existsSync(path.join(googleMcpDir, 'credentials.json'))) {
+    mounts.push(
+      { hostPath: googleMcpDir, containerPath: '/home/node/.google-mcp', readonly: true },
+      { hostPath: googleMcpDir, containerPath: googleMcpDir, readonly: true },
+    );
+  }
+
   // Mount agent-runner source from host — recompiled on container startup.
   // Bypasses Docker's build cache for code changes.
   const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');

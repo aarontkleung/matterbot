@@ -1,69 +1,139 @@
 import { Bot } from 'grammy';
+import MarkdownIt from 'markdown-it';
 
 import {
   ASSISTANT_NAME,
   TRIGGER_PATTERN,
 } from '../config.js';
 import { logger } from '../logger.js';
-import { convertMarkdownTables } from '../router.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function markdownToTelegramHtml(text: string): string {
-  const tableConverted = convertMarkdownTables(text);
+const md = new MarkdownIt({ html: false, linkify: false, breaks: false, typographer: false })
+  .enable('strikethrough')
+  .disable('table')
+  .disable('image');
 
-  const protected_: string[] = [];
-  const ph = (s: string) => { protected_.push(s); return `\x00${protected_.length - 1}\x00`; };
+type Token = ReturnType<typeof md.parse>[number];
 
-  let result = tableConverted
-    .replace(/^---+$/gm, '')
-    .replace(/^\d+\.\s+/gm, '• ')
-    .replace(/^[-*]\s+/gm, '• ')
-    // Fenced code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
-      lang
-        ? ph(`<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`)
-        : ph(`<pre>${escapeHtml(code)}</pre>`))
-    // Inline code
-    .replace(/`([^`]+)`/g, (_, code) => ph(`<code>${escapeHtml(code)}</code>`));
+function renderTokens(tokens: Token[]): string {
+  let out = '';
 
-  // Bold+italic
-  result = result.replace(/\*\*\*(.+?)\*\*\*/g, (_, c) =>
-    ph(`<b><i>${escapeHtml(c)}</i></b>`));
-  // Bold
-  result = result.replace(/\*\*(.+?)\*\*/g, (_, c) =>
-    ph(`<b>${escapeHtml(c)}</b>`));
-  // Strikethrough
-  result = result.replace(/~~(.+?)~~/g, (_, c) =>
-    ph(`<s>${escapeHtml(c)}</s>`));
-  // Italic
-  result = result.replace(/\*(.+?)\*/g, (_, c) =>
-    ph(`<i>${escapeHtml(c)}</i>`));
-  result = result.replace(/(?<!\w)_(.+?)_(?!\w)/g, (_, c) =>
-    ph(`<i>${escapeHtml(c)}</i>`));
-  // Headings → bold
-  result = result.replace(/^#{1,6}\s+(.+)$/gm, (_, c) =>
-    ph(`<b>${escapeHtml(c)}</b>`));
-  // Links
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
-    ph(`<a href="${u.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">${escapeHtml(t)}</a>`));
-  // Blockquotes
-  result = result.replace(/^>\s?(.*)$/gm, (_, c) =>
-    ph(`<blockquote>${escapeHtml(c)}</blockquote>`));
+  for (const tok of tokens) {
+    if (tok.children) {
+      out += renderInline(tok.children);
+      continue;
+    }
 
-  result = escapeHtml(result);
-
-  for (let i = 0; i < protected_.length; i++) {
-    result = result.replace(`\x00${i}\x00`, protected_[i]);
+    switch (tok.type) {
+      case 'heading_open':
+        out += '<b>';
+        break;
+      case 'heading_close':
+        out += '</b>\n';
+        break;
+      case 'paragraph_open':
+        break;
+      case 'paragraph_close':
+        out += '\n';
+        break;
+      case 'blockquote_open':
+        out += '<blockquote>';
+        break;
+      case 'blockquote_close':
+        if (out.endsWith('\n')) out = out.slice(0, -1);
+        out += '</blockquote>\n';
+        break;
+      case 'list_item_open':
+        out += '• ';
+        break;
+      case 'fence': {
+        const lang = tok.info?.trim();
+        const code = escapeHtml(tok.content.replace(/\n$/, ''));
+        out += lang
+          ? `<pre><code class="language-${lang}">${code}</code></pre>\n`
+          : `<pre>${code}</pre>\n`;
+        break;
+      }
+      case 'code_block': {
+        const code = escapeHtml(tok.content.replace(/\n$/, ''));
+        out += `<pre>${code}</pre>\n`;
+        break;
+      }
+      case 'inline':
+        out += renderInline(tok.children || []);
+        break;
+      default:
+        break;
+    }
   }
 
-  // Merge consecutive blockquotes into one
-  result = result.replace(/<\/blockquote>\n<blockquote>/g, '\n');
+  // Merge consecutive blockquotes
+  out = out.replace(/<\/blockquote>\n<blockquote>/g, '\n');
+  // Collapse excessive newlines
+  out = out.replace(/\n{3,}/g, '\n\n');
 
-  return result.replace(/\n{3,}/g, '\n\n');
+  return out.trim();
+}
+
+function escapeAttr(text: string): string {
+  return escapeHtml(text).replace(/"/g, '&quot;');
+}
+
+function renderInline(tokens: Token[]): string {
+  let out = '';
+  for (const tok of tokens) {
+    switch (tok.type) {
+      case 'text':
+        out += escapeHtml(tok.content);
+        break;
+      case 'softbreak':
+      case 'hardbreak':
+        out += '\n';
+        break;
+      case 'code_inline':
+        out += `<code>${escapeHtml(tok.content)}</code>`;
+        break;
+      case 'strong_open':
+        out += '<b>';
+        break;
+      case 'strong_close':
+        out += '</b>';
+        break;
+      case 'em_open':
+        out += '<i>';
+        break;
+      case 'em_close':
+        out += '</i>';
+        break;
+      case 's_open':
+        out += '<s>';
+        break;
+      case 's_close':
+        out += '</s>';
+        break;
+      case 'link_open': {
+        const href = tok.attrGet('href') || '';
+        out += `<a href="${escapeAttr(href)}">`;
+        break;
+      }
+      case 'link_close':
+        out += '</a>';
+        break;
+      default:
+        if (tok.content) out += escapeHtml(tok.content);
+        break;
+    }
+  }
+  return out;
+}
+
+function markdownToTelegramHtml(text: string): string {
+  const tokens = md.parse(text, {});
+  return renderTokens(tokens);
 }
 
 function numericId(jid: string): string {

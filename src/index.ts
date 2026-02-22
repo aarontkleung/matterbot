@@ -40,7 +40,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { formatMessages, findChannel, formatOutbound } from './router.js';
-import { createStatusState, handleToolUse, handleThinking, cleanupStatusMessage } from './status-message.js';
+import { createStatusState, handleToolUse, handleThinking, cleanupStatusMessage, handleSubagentCreate } from './status-message.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -206,6 +206,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
     if (result.toolUse) {
+      if (result.toolUse.toolName === 'TeamCreate' && result.toolUse.summary) {
+        handleSubagentCreate(statusState, result.toolUse.summary);
+      }
       if (channel) await handleToolUse(channel, chatJid, statusState, result.toolUse.toolName, result.toolUse.summary);
       return;
     }

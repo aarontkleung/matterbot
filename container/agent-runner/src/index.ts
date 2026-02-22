@@ -136,6 +136,10 @@ function formatToolSummary(toolName: string, input: Record<string, unknown>): st
       try { return new URL(String(input.url)).hostname; } catch { return String(input.url).slice(0, 40); }
     case 'Task':
       return input.description ? String(input.description) : undefined;
+    case 'TeamCreate':
+      return input.agentId ? String(input.agentId) : input.description ? String(input.description) : undefined;
+    case 'SendMessage':
+      return input.agentId ? String(input.agentId) : undefined;
     default:
       return undefined;
   }

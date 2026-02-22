@@ -36,6 +36,7 @@ export interface StatusState {
   completedTools: ToolEntry[];
   currentTool: ToolEntry | null;
   thinkingText: string | null;
+  activeSubagents: Map<string, { name: string; startedAt: number }>;
 }
 
 export function createStatusState(): StatusState {
@@ -47,6 +48,7 @@ export function createStatusState(): StatusState {
     completedTools: [],
     currentTool: null,
     thinkingText: null,
+    activeSubagents: new Map(),
   };
 }
 
@@ -172,4 +174,37 @@ export async function cleanupStatusMessage(
   state.completedTools = [];
   state.currentTool = null;
   state.thinkingText = null;
+  state.activeSubagents.clear();
+}
+
+// --- Subagent tracking ---
+
+export function handleSubagentCreate(
+  state: StatusState,
+  agentName: string,
+): void {
+  state.activeSubagents.set(agentName, { name: agentName, startedAt: Date.now() });
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m${s % 60}s`;
+}
+
+export type SubagentOutcome = 'success' | 'error' | 'timeout';
+
+export function formatSubagentAnnounce(
+  name: string,
+  outcome: SubagentOutcome,
+  startedAt?: number,
+  findings?: string,
+): string {
+  const icon = outcome === 'success' ? '✓' : outcome === 'error' ? '✗' : '—';
+  const verb = outcome === 'success' ? 'finished' : outcome === 'error' ? 'failed' : 'timed out';
+  const duration = startedAt ? ` (${formatDuration(Date.now() - startedAt)})` : '';
+  const header = `${icon} Subagent "${name}" ${verb}${duration}`;
+  if (!findings?.trim()) return header;
+  return `${header}\n\n${findings.trim()}`;
 }

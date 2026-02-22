@@ -193,6 +193,8 @@ const SECRET_KEYS = [
   'ANTHROPIC_BASE_URL',
   'CLAUDE_MODEL',
   'NOTION_TOKEN',
+  'GOOGLE_EMAIL',
+  'GOOGLE_PASSWORD',
 ];
 
 function readSecrets(): Record<string, string> {

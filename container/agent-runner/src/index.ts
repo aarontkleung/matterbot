@@ -598,6 +598,14 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
+  // Expose Google credentials to process.env so agent-browser login scripts
+  // can read them via $GOOGLE_EMAIL / $GOOGLE_PASSWORD in Bash.
+  for (const key of ['GOOGLE_EMAIL', 'GOOGLE_PASSWORD']) {
+    if (containerInput.secrets?.[key]) {
+      process.env[key] = containerInput.secrets[key];
+    }
+  }
+
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 

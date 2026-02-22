@@ -40,10 +40,13 @@ npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
 
-Service management:
+Service management (systemd user unit):
 ```bash
-launchctl load ~/Library/LaunchAgents/com.matterbot.plist
-launchctl unload ~/Library/LaunchAgents/com.matterbot.plist
+systemctl --user restart matterbot   # Restart
+systemctl --user stop matterbot      # Stop
+systemctl --user start matterbot     # Start
+systemctl --user status matterbot    # Check status
+journalctl --user -u matterbot -f    # Tail logs
 ```
 
 ## Container Build Cache

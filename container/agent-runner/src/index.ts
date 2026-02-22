@@ -216,9 +216,10 @@ function createPreCompactHook(): HookCallback {
   };
 }
 
-// Secrets to strip from Bash tool subprocess environments.
-// These are needed by claude-code for API auth but should never
-// be visible to commands Kit runs.
+// API/auth secrets to strip from Bash subprocess environments.
+// These are passed to the SDK via sdkEnv but must not leak to shell commands.
+// Note: Google credentials are intentionally left in process.env (see BASH_VISIBLE_SECRETS)
+// so agent-browser login scripts can access them via $GOOGLE_EMAIL / $GOOGLE_PASSWORD.
 const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'NOTION_TOKEN'];
 
 function createSanitizeBashHook(): HookCallback {
@@ -598,9 +599,10 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
-  // Expose Google credentials to process.env so agent-browser login scripts
-  // can read them via $GOOGLE_EMAIL / $GOOGLE_PASSWORD in Bash.
-  for (const key of ['GOOGLE_EMAIL', 'GOOGLE_PASSWORD']) {
+  // Secrets that must be visible to Bash subprocesses (not stripped by the sanitize hook).
+  // These are set on process.env so agent-browser scripts can read them directly.
+  const BASH_VISIBLE_SECRETS = ['GOOGLE_EMAIL', 'GOOGLE_PASSWORD'];
+  for (const key of BASH_VISIBLE_SECRETS) {
     if (containerInput.secrets?.[key]) {
       process.env[key] = containerInput.secrets[key];
     }

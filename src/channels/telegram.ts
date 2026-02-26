@@ -6,6 +6,8 @@ import {
   TRIGGER_PATTERN,
 } from '../config.js';
 import { logger } from '../logger.js';
+// convertMarkdownTables disabled - was causing HTML parse errors
+// import { convertMarkdownTables } from '../router.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
 function escapeHtml(text: string): string {
@@ -132,6 +134,7 @@ function renderInline(tokens: Token[]): string {
 }
 
 function markdownToTelegramHtml(text: string): string {
+  // convertMarkdownTables disabled - pass text directly to markdown-it
   const tokens = md.parse(text, {});
   return renderTokens(tokens);
 }

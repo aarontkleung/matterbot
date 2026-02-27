@@ -206,6 +206,10 @@ const SECRET_KEYS = [
   'NOTION_TOKEN',
   'GOOGLE_EMAIL',
   'GOOGLE_PASSWORD',
+  'FIRECRAWL_API_KEY',
+  'HUNTER_API_KEY',
+  'MATTERBASE_API_URL',
+  'MATTERBASE_API_KEY',
 ];
 
 function readSecrets(): Record<string, string> {

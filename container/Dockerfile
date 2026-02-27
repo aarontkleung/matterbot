@@ -49,6 +49,9 @@ COPY agent-runner/package*.json ./
 # Install dependencies
 RUN npm install
 
+# Copy matterbase-mcp (pre-built with node_modules)
+COPY matterbase-mcp/ /app/matterbase-mcp/
+
 # Copy source code
 COPY agent-runner/ ./
 

@@ -1,0 +1,28 @@
+{
+  "name": "@matterbase/matterbase-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Matterbase backend API integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test:workflow": "tsx scripts/test-product-workflow.ts",
+    "test:workflow:cleanup": "tsx scripts/test-product-workflow.ts --cleanup"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
+import { buildScrapingMcpServer } from './scraping/tools.js';
 
 interface ContainerInput {
   prompt: string;
@@ -220,7 +221,7 @@ function createPreCompactHook(): HookCallback {
 // These are passed to the SDK via sdkEnv but must not leak to shell commands.
 // Note: Google credentials are intentionally left in process.env (see BASH_VISIBLE_SECRETS)
 // so agent-browser login scripts can access them via $GOOGLE_EMAIL / $GOOGLE_PASSWORD.
-const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'NOTION_TOKEN'];
+const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'NOTION_TOKEN', 'FIRECRAWL_API_KEY', 'HUNTER_API_KEY', 'MATTERBASE_API_URL', 'MATTERBASE_API_KEY', 'NOTION_API_KEY'];
 
 function createSanitizeBashHook(): HookCallback {
   return async (input, _toolUseId, _context) => {
@@ -476,6 +477,8 @@ async function runQuery(
         'mcp__matterbot__*',
         'mcp__notion__*',
         'mcp__google_workspace__*',
+        'mcp__scraping-tools__*',
+        'mcp__matterbase__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -501,6 +504,19 @@ async function runQuery(
           google_workspace: {
             command: 'google-workspace-mcp',
             args: ['serve'],
+          },
+        } : {}),
+        ...(sdkEnv.FIRECRAWL_API_KEY ? {
+          'scraping-tools': buildScrapingMcpServer(),
+        } : {}),
+        ...(sdkEnv.MATTERBASE_API_URL && sdkEnv.MATTERBASE_API_KEY ? {
+          matterbase: {
+            command: 'node',
+            args: ['/app/matterbase-mcp/dist/index.js'],
+            env: {
+              MATTERBASE_API_URL: sdkEnv.MATTERBASE_API_URL,
+              MATTERBASE_API_KEY: sdkEnv.MATTERBASE_API_KEY,
+            },
           },
         } : {}),
       },
@@ -614,6 +630,12 @@ async function main(): Promise<void> {
       process.env[key] = containerInput.secrets[key];
     }
   }
+
+  // Bridge secrets to process.env for scraping tools (in-process SDK MCP server)
+  for (const key of ['FIRECRAWL_API_KEY', 'HUNTER_API_KEY', 'MATTERBASE_API_URL', 'MATTERBASE_API_KEY']) {
+    if (sdkEnv[key]) process.env[key] = sdkEnv[key];
+  }
+  if (sdkEnv.NOTION_TOKEN) process.env.NOTION_API_KEY = sdkEnv.NOTION_TOKEN;
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');

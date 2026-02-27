@@ -139,6 +139,107 @@ function markdownToTelegramHtml(text: string): string {
   return renderTokens(tokens);
 }
 
+const MAX_TG_LENGTH = 4096;
+
+/** Split raw markdown into logical blocks that can be parsed independently. */
+function splitMarkdownBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const lines = text.split('\n');
+  let current: string[] = [];
+  let inFence = false;
+
+  for (const line of lines) {
+    if (/^(`{3,}|~{3,})/.test(line.trimEnd())) {
+      if (inFence) {
+        current.push(line);
+        blocks.push(current.join('\n'));
+        current = [];
+        inFence = false;
+        continue;
+      } else {
+        if (current.length > 0) {
+          blocks.push(current.join('\n'));
+          current = [];
+        }
+        current.push(line);
+        inFence = true;
+        continue;
+      }
+    }
+
+    if (inFence) {
+      current.push(line);
+      continue;
+    }
+
+    if (line.trim() === '') {
+      if (current.length > 0) {
+        blocks.push(current.join('\n'));
+        current = [];
+      }
+    } else {
+      current.push(line);
+    }
+  }
+
+  if (current.length > 0) {
+    blocks.push(current.join('\n'));
+  }
+  return blocks;
+}
+
+/** Accumulate markdown blocks into chunks whose HTML stays under the Telegram limit. */
+function chunkMarkdownForTelegram(blocks: string[]): string[] {
+  const chunks: string[] = [];
+  let currentBlocks: string[] = [];
+  let currentHtmlLen = 0;
+
+  for (const block of blocks) {
+    const blockHtml = markdownToTelegramHtml(block);
+
+    if (blockHtml.length > MAX_TG_LENGTH) {
+      if (currentBlocks.length > 0) {
+        chunks.push(currentBlocks.join('\n\n'));
+        currentBlocks = [];
+        currentHtmlLen = 0;
+      }
+      chunks.push(block);
+      continue;
+    }
+
+    const sep = currentBlocks.length > 0 ? 2 : 0;
+    if (currentHtmlLen + sep + blockHtml.length > MAX_TG_LENGTH && currentBlocks.length > 0) {
+      chunks.push(currentBlocks.join('\n\n'));
+      currentBlocks = [block];
+      currentHtmlLen = blockHtml.length;
+    } else {
+      currentBlocks.push(block);
+      currentHtmlLen += sep + blockHtml.length;
+    }
+  }
+
+  if (currentBlocks.length > 0) {
+    chunks.push(currentBlocks.join('\n\n'));
+  }
+  return chunks;
+}
+
+/** Simple line-boundary splitter for plain text fallback. */
+function splitPlainText(input: string, maxLength: number): string[] {
+  const result: string[] = [];
+  let current = '';
+  for (const line of input.split('\n')) {
+    if (current.length + line.length + 1 > maxLength && current) {
+      result.push(current);
+      current = line;
+    } else {
+      current += (current ? '\n' : '') + line;
+    }
+  }
+  if (current) result.push(current);
+  return result;
+}
+
 function numericId(jid: string): string {
   return jid.replace(/^tg:/, '');
 }
@@ -317,13 +418,11 @@ export class TelegramChannel implements Channel {
 
     try {
       const chatId = numericId(jid);
-      const formatted = markdownToTelegramHtml(text);
-      const MAX_LENGTH = 4096;
 
-      const send = async (chunk: string, plainChunk: string) => {
+      const sendHtml = async (html: string, plainFallback: string) => {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            await this.bot!.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
+            await this.bot!.api.sendMessage(chatId, html, { parse_mode: 'HTML' });
             return;
           } catch (err: unknown) {
             const ge = err as { error_code?: number; parameters?: { retry_after?: number } };
@@ -333,37 +432,32 @@ export class TelegramChannel implements Channel {
               await new Promise(r => setTimeout(r, delay));
               continue;
             }
-            // HTML parse error — fall back to plain text chunk
-            await this.bot!.api.sendMessage(chatId, plainChunk);
+            // HTML parse error — fall back to plain text
+            for (const pc of splitPlainText(plainFallback, MAX_TG_LENGTH)) {
+              await this.bot!.api.sendMessage(chatId, pc);
+            }
             return;
           }
         }
       };
 
-      // Split both formatted and plain text at newline boundaries
-      const splitLines = (input: string) => {
-        const result: string[] = [];
-        let current = '';
-        for (const line of input.split('\n')) {
-          if (current.length + line.length + 1 > MAX_LENGTH && current) {
-            result.push(current);
-            current = line;
-          } else {
-            current += (current ? '\n' : '') + line;
-          }
-        }
-        if (current) result.push(current);
-        return result;
-      };
+      // Split markdown at block boundaries, then convert each chunk independently
+      const mdChunks = chunkMarkdownForTelegram(splitMarkdownBlocks(text));
 
-      const chunks = splitLines(formatted);
-      const plainChunks = splitLines(text);
-
-      for (let i = 0; i < chunks.length; i++) {
+      for (let i = 0; i < mdChunks.length; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 1000));
-        await send(chunks[i], plainChunks[i] || chunks[i]);
+        const html = markdownToTelegramHtml(mdChunks[i]);
+
+        if (html.length > MAX_TG_LENGTH) {
+          // Oversized single block — send as plain text
+          for (const pc of splitPlainText(mdChunks[i], MAX_TG_LENGTH)) {
+            await this.bot!.api.sendMessage(chatId, pc);
+          }
+        } else {
+          await sendHtml(html, mdChunks[i]);
+        }
       }
-      logger.info({ jid, length: text.length, chunks: chunks.length }, 'Telegram message sent');
+      logger.info({ jid, length: text.length, chunks: mdChunks.length }, 'Telegram message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
     }

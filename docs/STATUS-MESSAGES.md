@@ -71,17 +71,17 @@ I've updated the configuration in config.ts...
 
 ### Benefits
 
-- Status messages persist in chat history for reference
-- Clear separation between agent commentary and tool execution
-- Users can see the full narrative of what happened
+- Status messages provide context in the status indicator
+- Clear separation between agent commentary and final response
+- No chat clutter from intermediate messages
 - More conversational and transparent
-- Tool progress remains clean and focused
+- Tool progress and status messages unified in one indicato
 
 ### Trade-offs
 
 - More messages in the chat (could be noisy if agent is very verbose)
-- Status messages are permanent (not cleaned up)
-- Relies on agent outputting concise, meaningful status updates
+- Status messages are ephemeral (deleted when response arrives)
+- Users can't scroll back to see intermediate commentary
 
 ## Configuration
 
@@ -92,20 +92,20 @@ No configuration needed. The feature is automatically enabled through the Claude
 To test the feature:
 
 1. Trigger the agent with a multi-step task
-2. Observe status messages appearing as separate chat messages
-3. Verify tool display remains as a separate status indicator
-4. Check that status messages persist after completion
+2. Observe status messages appearing in the ephemeral status indicator
+3. Verify tool display and status messages share the same indicator
+4. Check that status indicator is deleted after final response
 
 Example test prompt:
 ```
 Read the README.md file, then check if there's a package.json, and tell me what you found.
 ```
 
-The agent should output status messages like:
-- "Let me read the README first" (separate message)
-- Status indicator: "○ Reading file: README.md"
-- "Now checking for package.json" (separate message)
-- Status indicator: "● Reading file: README.md\n○ Finding files: package.json"
-- "Found both files, analyzing..." (separate message)
-- Final response with findings (separate message)
-
+The agent should show in the status indicator:
+- "Let me read the README first"
+- "○ Reading file: README.md"
+- "Now checking for package.json"
+- "● Reading file: README.md\n○ Finding files: package.json"
+- "Found both files, analyzing..."
+- Final response appears as a persistent message
+- Status indicator is deleted

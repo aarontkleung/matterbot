@@ -149,8 +149,10 @@ export async function handleThinking(
 ): Promise<void> {
   if (!channel.sendStatusMessage || !channel.editMessage) return;
 
-  // Static indicator — raw thinking text is too noisy
-  state.thinkingText = 'Thinking…';
+  // Only set default "Thinking…" if no status message is already set
+  if (!state.thinkingText) {
+    state.thinkingText = 'Thinking…';
+  }
 
   await sendOrEditStatus(channel, jid, state);
 }
@@ -161,10 +163,10 @@ export async function handleStatusMessage(
   state: StatusState,
   message: string,
 ): Promise<void> {
-  // Send status message as a persistent chat message (not part of the status indicator)
-  if (channel.sendMessage) {
-    await channel.sendMessage(jid, message);
-  }
+  if (!channel.sendStatusMessage || !channel.editMessage) return;
+  // Show status message in the ephemeral status indicator
+  state.thinkingText = message;
+  await sendOrEditStatus(channel, jid, state);
 }
 
 export async function cleanupStatusMessage(

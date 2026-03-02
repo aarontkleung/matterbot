@@ -6,6 +6,21 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+## IMPORTANT: VNC Browser Viewing
+
+**Before using agent-browser, ALWAYS check if VNC is enabled and announce the viewing URL:**
+
+```bash
+if [ "$ENABLE_VNC" = "1" ]; then
+  echo "🖥️ Browser View: http://${VNC_HOST:-localhost}:${VNC_PORT}/vnc.html"
+  echo ""
+  echo "You can watch and control the browser in real-time by opening this link."
+  echo ""
+fi
+```
+
+This lets users see what the browser is doing and intervene if needed (e.g., solve captchas).
+
 ## Quick start
 
 ```bash
@@ -18,10 +33,11 @@ agent-browser close             # Close browser
 
 ## Core workflow
 
-1. Navigate: `agent-browser open <url>`
-2. Snapshot: `agent-browser snapshot -i` (returns elements with refs like `@e1`, `@e2`)
-3. Interact using refs from the snapshot
-4. Re-snapshot after navigation or significant DOM changes
+1. **Check VNC**: If `$ENABLE_VNC = 1`, announce the browser view URL first
+2. Navigate: `agent-browser open <url>`
+3. Snapshot: `agent-browser snapshot -i` (returns elements with refs like `@e1`, `@e2`)
+4. Interact using refs from the snapshot
+5. Re-snapshot after navigation or significant DOM changes
 
 ## Commands
 
@@ -157,3 +173,34 @@ agent-browser get text @e1  # Get product title
 agent-browser get attr @e2 href  # Get link URL
 agent-browser screenshot products.png
 ```
+
+## Example: With VNC enabled
+
+```bash
+# Check if VNC is enabled and announce URL
+if [ "$ENABLE_VNC" = "1" ]; then
+  echo "🖥️ Browser View: http://${VNC_HOST:-localhost}:${VNC_PORT}"
+  echo ""
+  echo "Opening the browser. You can watch and control it in real-time."
+  echo ""
+fi
+
+# Proceed with browser automation
+agent-browser open https://example.com/login
+agent-browser snapshot -i
+# User can now see the browser and solve any captchas if needed
+agent-browser fill @e1 "username"
+agent-browser fill @e2 "password"
+agent-browser click @e3
+agent-browser wait --url "**/dashboard"
+```
+
+## When to announce VNC URL
+
+**Always announce the VNC URL when:**
+- Starting any browser task (if VNC is enabled)
+- The task involves authentication (captchas possible)
+- The task is complex and user might want to observe
+- User explicitly asks to "watch" or "see" the browser
+
+**The announcement should happen BEFORE the first `agent-browser` command.**

@@ -12,8 +12,12 @@ import {
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
   DATA_DIR,
+  ENABLE_VNC,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  VNC_HOST,
+  VNC_PORT_END,
+  VNC_PORT_START,
 } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
@@ -23,6 +27,25 @@ import { RegisteredGroup } from './types.js';
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---MATTERBOT_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---MATTERBOT_OUTPUT_END---';
+
+// VNC port allocation tracking
+const vncPortAllocations = new Map<string, number>();
+
+function allocateVncPort(): number | null {
+  if (!ENABLE_VNC) return null;
+
+  const allocated = new Set(vncPortAllocations.values());
+  for (let port = VNC_PORT_START; port <= VNC_PORT_END; port++) {
+    if (!allocated.has(port)) {
+      return port;
+    }
+  }
+  return null; // No ports available
+}
+
+function releaseVncPort(containerName: string): void {
+  vncPortAllocations.delete(containerName);
+}
 
 function getHomeDir(): string {
   const home = process.env.HOME || os.homedir();
@@ -51,6 +74,8 @@ export interface ContainerOutput {
   error?: string;
   toolUse?: { toolName: string; summary?: string };
   thinking?: string;
+  vncUrl?: string;
+  statusMessage?: string;
 }
 
 interface VolumeMount {
@@ -212,8 +237,20 @@ function readSecrets(): Record<string, string> {
   return readEnvFile(SECRET_KEYS);
 }
 
-function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
+function buildContainerArgs(
+  mounts: VolumeMount[],
+  containerName: string,
+  vncPort: number | null,
+): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+
+  // Add VNC port mapping if enabled
+  if (vncPort !== null) {
+    args.push('-p', `${vncPort}:6080`);
+    args.push('-e', 'ENABLE_VNC=1');
+    args.push('-e', `VNC_PORT=${vncPort}`); // Host port for URL generation
+    args.push('-e', `VNC_HOST=${VNC_HOST}`);
+  }
 
   // Docker: -v with :ro suffix for readonly
   for (const mount of mounts) {
@@ -243,7 +280,14 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `matterbot-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const vncPort = allocateVncPort();
+  if (vncPort === null && ENABLE_VNC) {
+    logger.warn({ group: group.name }, 'No VNC ports available, running without VNC');
+  }
+  if (vncPort !== null) {
+    vncPortAllocations.set(containerName, vncPort);
+  }
+  const containerArgs = buildContainerArgs(mounts, containerName, vncPort);
 
   logger.debug(
     {
@@ -264,6 +308,8 @@ export async function runContainerAgent(
       containerName,
       mountCount: mounts.length,
       isMain: input.isMain,
+      vncPort: vncPort !== null ? vncPort : undefined,
+      vncUrl: vncPort !== null ? `http://${VNC_HOST}:${vncPort}` : undefined,
     },
     'Spawning container agent',
   );
@@ -294,6 +340,9 @@ export async function runContainerAgent(
     let parseBuffer = '';
     let newSessionId: string | undefined;
     let outputChain = Promise.resolve();
+
+    // VNC URL is announced by agent-browser skill when browser is actually used
+    // No need to announce it on every container spawn
 
     container.stdout.on('data', (data) => {
       const chunk = data.toString();
@@ -397,6 +446,7 @@ export async function runContainerAgent(
 
     container.on('close', (code) => {
       clearTimeout(timeout);
+      releaseVncPort(containerName);
       const duration = Date.now() - startTime;
 
       if (timedOut) {

@@ -60,6 +60,7 @@ function toolDisplayLine(toolEntry: ToolEntry, prefix: string): string {
 function formatStatusText(state: StatusState): string {
   const lines: string[] = [];
 
+  // Show thinking indicator (status messages are now sent separately)
   if (state.thinkingText) {
     lines.push(state.thinkingText);
   }
@@ -152,6 +153,18 @@ export async function handleThinking(
   state.thinkingText = 'Thinking…';
 
   await sendOrEditStatus(channel, jid, state);
+}
+
+export async function handleStatusMessage(
+  channel: Channel,
+  jid: string,
+  state: StatusState,
+  message: string,
+): Promise<void> {
+  // Send status message as a persistent chat message (not part of the status indicator)
+  if (channel.sendMessage) {
+    await channel.sendMessage(jid, message);
+  }
 }
 
 export async function cleanupStatusMessage(

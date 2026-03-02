@@ -5,7 +5,7 @@ import { readEnvFile } from './env.js';
 // Read config values from .env (falls back to process.env).
 // Secrets are NOT read here — they stay on disk and are loaded only
 // where needed (container-runner.ts) to avoid leaking to child processes.
-const envConfig = readEnvFile(['ASSISTANT_NAME', 'ASSISTANT_HAS_OWN_NUMBER', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_ONLY']);
+const envConfig = readEnvFile(['ASSISTANT_NAME', 'ASSISTANT_HAS_OWN_NUMBER', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_ONLY', 'ENABLE_VNC', 'VNC_PORT_START', 'VNC_PORT_END', 'VNC_HOST']);
 
 export const ASSISTANT_NAME =
   process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -67,3 +67,10 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// VNC configuration for browser-in-browser support
+export const ENABLE_VNC = (process.env.ENABLE_VNC || envConfig.ENABLE_VNC) === '1';
+export const VNC_PORT_START = parseInt(process.env.VNC_PORT_START || envConfig.VNC_PORT_START || '6080', 10);
+export const VNC_PORT_END = parseInt(process.env.VNC_PORT_END || envConfig.VNC_PORT_END || '6089', 10);
+export const VNC_HOST = process.env.VNC_HOST || envConfig.VNC_HOST || 'localhost';
+

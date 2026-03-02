@@ -14,12 +14,14 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
-| `src/config.ts` | Trigger pattern, paths, intervals |
-| `src/container-runner.ts` | Spawns agent containers with mounts |
+| `src/config.ts` | Trigger pattern, paths, intervals, VNC config |
+| `src/container-runner.ts` | Spawns agent containers with mounts, VNC port allocation |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 | `container/skills/agent-browser.md` | Browser automation tool (available to all agents via Bash) |
+| `container/skills/agent-browser-ui.md` | Real-time browser viewing via noVNC (optional) |
+| `docs/VNC.md` | noVNC setup and usage guide |
 
 ## Skills
 
@@ -38,6 +40,7 @@ Run commands directly—don't tell the user to run them.
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
+./test-vnc.sh        # Test VNC functionality
 ```
 
 Service management (systemd user unit):
@@ -48,6 +51,15 @@ systemctl --user start matterbot     # Start
 systemctl --user status matterbot    # Check status
 journalctl --user -u matterbot -f    # Tail logs
 ```
+
+## VNC Browser Viewing (Optional)
+
+Enable real-time browser viewing via noVNC. Add to `.env`:
+```bash
+ENABLE_VNC=1
+```
+
+See [docs/VNC.md](docs/VNC.md) for full setup and usage.
 
 ## Container Build Cache
 

@@ -37,6 +37,7 @@ interface ContainerOutput {
   error?: string;
   toolUse?: { toolName: string; summary?: string };
   thinking?: string;
+  statusMessage?: string;
 }
 
 interface SessionEntry {
@@ -555,7 +556,7 @@ async function runQuery(
       const content = (message as { message?: { content?: unknown[] } }).message?.content;
       if (Array.isArray(content)) {
         for (const block of content) {
-          const b = block as { type?: string; name?: string; input?: Record<string, unknown>; thinking?: string };
+          const b = block as { type?: string; name?: string; input?: Record<string, unknown>; thinking?: string; text?: string };
           if (b.type === 'tool_use' && b.name) {
             writeOutput({
               status: 'success',
@@ -565,6 +566,9 @@ async function runQuery(
           }
           if (b.type === 'thinking' && b.thinking) {
             writeOutput({ status: 'success', result: null, thinking: b.thinking });
+          }
+          if (b.type === 'text' && b.text) {
+            writeOutput({ status: 'success', result: null, statusMessage: b.text });
           }
         }
       }
@@ -584,6 +588,7 @@ async function runQuery(
       resultCount++;
       const textResult = (message as { result?: string }).result || null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
+
       writeOutput({
         status: 'success',
         result: textResult || null,

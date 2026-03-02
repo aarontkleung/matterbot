@@ -2,7 +2,7 @@
 
 ## Overview
 
-The agent outputs brief status messages between tool calls as **persistent chat messages**, allowing Claude to communicate what it's doing in real-time. These messages appear as separate messages in the chat history, independent from the tool execution status indicator.
+The agent outputs brief status messages between tool calls that are displayed in the **ephemeral status indicator** (edit-in-place message), allowing Claude to communicate what it's doing in real-time. These messages appear in the status indicator alongside tool progress, and are automatically cleaned up when the final response arrives.
 
 ## Implementation
 
@@ -18,9 +18,9 @@ The agent outputs brief status messages between tool calls as **persistent chat 
    - Streams status messages to output callbacks
 
 3. **Status Display** (`src/status-message.ts`)
-   - `handleStatusMessage()` sends status messages as regular chat messages
-   - Tool display remains as a separate edit-in-place status indicator
-   - Status messages persist in chat history
+   - `handleStatusMessage()` updates the ephemeral status indicator with status message text
+   - Tool display and status messages share the same edit-in-place indicator
+   - Status messages are cleaned up when the final response arrives
 
 4. **Message Handler** (`src/index.ts`)
    - Routes `statusMessage` events to display handler
@@ -28,7 +28,7 @@ The agent outputs brief status messages between tool calls as **persistent chat 
 
 ### How It Works
 
-When Claude outputs text between tool calls, those messages are sent as separate, persistent chat messages:
+When Claude outputs text between tool calls, those messages are shown in the ephemeral status indicator:
 
 ```
 Assistant: Let me check the configuration files first.
@@ -39,30 +39,20 @@ Assistant: Now I'll update the settings.
 
 The user sees:
 
-**Message 1 (persistent):**
-```
-Let me check the configuration files first.
-```
-
 **Status indicator (edit-in-place):**
 ```
-Thinking…
+Let me check the configuration files first.
 ○ Reading file: config.ts
-```
-
-**Message 2 (persistent):**
-```
-Now I'll update the settings.
 ```
 
 **Status indicator (updated):**
 ```
-Thinking…
+Now I'll update the settings.
 ● Reading file: config.ts
 ○ Editing file: config.ts
 ```
 
-**Final response (persistent):**
+**Final response (persistent message):**
 ```
 I've updated the configuration in config.ts...
 ```

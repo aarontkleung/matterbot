@@ -555,6 +555,7 @@ async function runQuery(
     if (message.type === 'assistant' && 'message' in message) {
       const content = (message as { message?: { content?: unknown[] } }).message?.content;
       if (Array.isArray(content)) {
+        // Emit tool_use, thinking, and text blocks in-order.
         for (const block of content) {
           const b = block as { type?: string; name?: string; input?: Record<string, unknown>; thinking?: string; text?: string };
           if (b.type === 'tool_use' && b.name) {

@@ -82,6 +82,8 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
+  // Optional: message send with delivery success flag (Telegram persistent status)
+  sendMessageWithResult?(jid: string, text: string): Promise<boolean>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
@@ -89,6 +91,7 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: edit-in-place status messages (Telegram only)
   sendStatusMessage?(jid: string, text: string): Promise<number | null>;
+  editMessageWithResult?(jid: string, messageId: number, text: string): Promise<boolean>;
   editMessage?(jid: string, messageId: number, text: string): Promise<void>;
   deleteMessage?(jid: string, messageId: number): Promise<void>;
 }

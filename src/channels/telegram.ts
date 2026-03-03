@@ -410,20 +410,20 @@ export class TelegramChannel implements Channel {
     });
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  private async sendMessageInternal(jid: string, text: string): Promise<boolean> {
     if (!this.bot) {
       logger.warn('Telegram bot not initialized');
-      return;
+      return false;
     }
 
     try {
       const chatId = numericId(jid);
 
-      const sendHtml = async (html: string, plainFallback: string) => {
+      const sendHtml = async (html: string, plainFallback: string): Promise<boolean> => {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             await this.bot!.api.sendMessage(chatId, html, { parse_mode: 'HTML' });
-            return;
+            return true;
           } catch (err: unknown) {
             const ge = err as { error_code?: number; parameters?: { retry_after?: number } };
             if (ge.error_code === 429 && ge.parameters?.retry_after) {
@@ -436,9 +436,10 @@ export class TelegramChannel implements Channel {
             for (const pc of splitPlainText(plainFallback, MAX_TG_LENGTH)) {
               await this.bot!.api.sendMessage(chatId, pc);
             }
-            return;
+            return true;
           }
         }
+        return false;
       };
 
       // Split markdown at block boundaries, then convert each chunk independently
@@ -454,13 +455,24 @@ export class TelegramChannel implements Channel {
             await this.bot!.api.sendMessage(chatId, pc);
           }
         } else {
-          await sendHtml(html, mdChunks[i]);
+          const sent = await sendHtml(html, mdChunks[i]);
+          if (!sent) return false;
         }
       }
       logger.info({ jid, length: text.length, chunks: mdChunks.length }, 'Telegram message sent');
+      return true;
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
+      return false;
     }
+  }
+
+  async sendMessage(jid: string, text: string): Promise<void> {
+    await this.sendMessageInternal(jid, text);
+  }
+
+  async sendMessageWithResult(jid: string, text: string): Promise<boolean> {
+    return this.sendMessageInternal(jid, text);
   }
 
   isConnected(): boolean {
@@ -500,12 +512,21 @@ export class TelegramChannel implements Channel {
   }
 
   async editMessage(jid: string, messageId: number, text: string): Promise<void> {
-    if (!this.bot) return;
+    await this.editMessageWithResult(jid, messageId, text);
+  }
+
+  async editMessageWithResult(jid: string, messageId: number, text: string): Promise<boolean> {
+    if (!this.bot) return false;
     try {
       await this.bot.api.editMessageText(numericId(jid), messageId, text);
+      return true;
     } catch (err) {
-      // Telegram returns 400 if text is unchanged — safe to ignore
+      const message = String(err);
+      if (message.includes('message is not modified')) {
+        return true;
+      }
       logger.debug({ jid, messageId, err }, 'Failed to edit Telegram message');
+      return false;
     }
   }
 

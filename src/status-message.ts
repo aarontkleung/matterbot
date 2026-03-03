@@ -88,6 +88,7 @@ async function sendOrEditStatus(
   if (!channel.sendStatusMessage || !channel.editMessage) return;
 
   const text = formatStatusText(state);
+  if (!text.trim()) return;
 
   if (state.messageId === null) {
     state.messageId = await channel.sendStatusMessage(jid, text);

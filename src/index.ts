@@ -41,7 +41,6 @@ import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { formatMessages, findChannel, formatOutbound } from './router.js';
 import { createStatusState, handleToolUse, handleThinking, cleanupStatusMessage, handleSubagentCreate } from './status-message.js';
-import { appendStatusCommentToPersistentBlock, createPersistentStatusBlockState, shouldSuppressFinalResult } from './status-routing.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -202,7 +201,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
   const statusState = createStatusState();
-  const persistentStatusState = createPersistentStatusBlockState();
   const channel = findChannel(channels, chatJid);
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
@@ -219,14 +217,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       return;
     }
     if (result.statusMessage) {
-      const delivery = await appendStatusCommentToPersistentBlock(
-        channel,
-        chatJid,
-        persistentStatusState,
-        result.statusMessage,
-      );
-      if (delivery.sentOrEdited) {
-        outputSentToUser = true;
+      const formattedStatus = formatOutbound(result.statusMessage).trim();
+      if (formattedStatus && channel?.sendStatusMessage) {
+        const statusMessageId = await channel.sendStatusMessage(chatJid, formattedStatus);
+        if (statusMessageId !== null) {
+          outputSentToUser = true;
+        }
       }
       return;
     }
@@ -238,19 +234,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       const formattedFinal = formatOutbound(text);
-      const suppressFinal = shouldSuppressFinalResult(
-        channel,
-        persistentStatusState,
-        formattedFinal,
-      );
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (formattedFinal && !suppressFinal) {
+      if (formattedFinal) {
         if (channel) {
           await channel.sendMessage(chatJid, formattedFinal);
         }
         outputSentToUser = true;
-      } else if (formattedFinal && suppressFinal) {
-        logger.debug({ group: group.name, chatJid }, 'Suppressing final result message because persistent status updates were already sent');
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
       resetIdleTimer();

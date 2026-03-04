@@ -82,7 +82,7 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
-  // Optional: message send with delivery success flag (Telegram persistent status)
+  // Optional: message send with delivery success flag
   sendMessageWithResult?(jid: string, text: string): Promise<boolean>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;

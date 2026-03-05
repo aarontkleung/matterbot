@@ -58,26 +58,28 @@ function toolDisplayLine(toolEntry: ToolEntry, prefix: string): string {
 }
 
 function formatStatusText(state: StatusState): string {
-  const lines: string[] = [];
-
-  // Show thinking indicator (status messages are now sent separately)
-  if (state.thinkingText) {
-    lines.push(state.thinkingText);
-  }
-
+  const statusText = state.thinkingText || '';
+  const toolLines: string[] = [];
   const completed = state.completedTools;
   const maxShown = 4;
 
   if (completed.length > maxShown) {
-    lines.push(`... and ${completed.length - maxShown} more`);
+    toolLines.push(`... and ${completed.length - maxShown} more`);
   }
   for (const entry of completed.slice(-maxShown)) {
-    lines.push(toolDisplayLine(entry, '●'));
+    toolLines.push(toolDisplayLine(entry, '●'));
   }
   if (state.currentTool) {
-    lines.push(toolDisplayLine(state.currentTool, '○'));
+    toolLines.push(toolDisplayLine(state.currentTool, '○'));
   }
-  return lines.join('\n');
+
+  if (statusText && toolLines.length > 0) {
+    return `${statusText}\n\n${toolLines.join('\n')}`;
+  }
+  if (statusText) {
+    return statusText;
+  }
+  return toolLines.join('\n');
 }
 
 async function sendOrEditStatus(
